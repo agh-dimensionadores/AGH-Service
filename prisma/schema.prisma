@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  nombre       String
+  rol          String
+  clienteId    String?
+  cliente      Cliente? @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  creadoEn     DateTime @default(now())
+}
+
+model Cliente {
+  id        String     @id @default(cuid())
+  nombre    String
+  empresa   String?
+  email     String?
+  telefono  String?
+  direccion String?
+  notas     String?
+  creadoEn  DateTime   @default(now())
+  maquinas  Maquina[]
+  usuarios  Usuario[]
+  soportes  Soporte[]
+}
+
+model CatalogoMaquina {
+  id       String    @id @default(cuid())
+  marca    String
+  nombre   String
+  imagen   String?
+  creadoEn DateTime  @default(now())
+  maquinas Maquina[]
+}
+
+model Maquina {
+  id             String          @id @default(cuid())
+  catalogoId     String
+  catalogo       CatalogoMaquina @relation(fields: [catalogoId], references: [id], onDelete: Restrict)
+  numeroSerie    String          @unique
+  descripcion    String?
+  ubicacion      String?
+  estadoEquipo   String          @default("operativa")
+  fechaCompra    DateTime?
+  clienteId      String
+  cliente        Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  mantenimientos Mantenimiento[]
+  soportes       Soporte[]
+  creadoEn       DateTime        @default(now())
+}
+
+model Mantenimiento {
+  id          String   @id @default(cuid())
+  maquinaId   String
+  maquina     Maquina  @relation(fields: [maquinaId], references: [id], onDelete: Cascade)
+  fecha       DateTime @default(now())
+  tipo        String
+  titulo      String
+  descripcion String
+  tecnico     String?
+  piezas      String?
+  costo       Float?
+  estado      String   @default("completado")
+  proximo     DateTime?
+  creadoEn    DateTime @default(now())
+}
+
+model Soporte {
+  id        String   @id @default(cuid())
+  clienteId String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  maquinaId String?
+  maquina   Maquina? @relation(fields: [maquinaId], references: [id], onDelete: SetNull)
+  titulo    String
+  mensaje   String
+  estado    String   @default("abierto")
+  creadoEn  DateTime @default(now())
+}
