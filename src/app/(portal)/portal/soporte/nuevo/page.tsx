@@ -1,6 +1,7 @@
 import { createSoporteAction } from "@/app/auth-actions";
+import { GuardedForm, SubmitButton } from "@/components/form";
 import { requireCliente } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
 import {
   Field,
   PageHeader,
@@ -19,10 +20,10 @@ export default async function NuevoSoportePage({
 }) {
   const session = await requireCliente();
   const { maquinaId } = await searchParams;
-  const maquinas = await prisma.maquina.findMany({
-    where: { clienteId: session.clienteId! },
-    orderBy: { creadoEn: "desc" },
-    include: { catalogo: true },
+  const unidades = await prismaPg.clienteMaquina.findMany({
+    where: { idCliente: session.clienteId! },
+    orderBy: { fechaCreacion: "desc" },
+    include: { maquina: true },
   });
 
   return (
@@ -33,7 +34,7 @@ export default async function NuevoSoportePage({
         action={<SecondaryLink href="/portal/soporte">Volver</SecondaryLink>}
       />
       <Panel className="max-w-2xl">
-        <form action={createSoporteAction} className="grid gap-4">
+        <GuardedForm action={createSoporteAction} className="grid gap-4">
           <Field label="Máquina (opcional)">
             <select
               name="maquinaId"
@@ -41,9 +42,9 @@ export default async function NuevoSoportePage({
               className={inputClass}
             >
               <option value="">General / sin máquina específica</option>
-              {maquinas.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {machineName(m)} ({m.numeroSerie})
+              {unidades.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {machineName(u)} ({u.numeroSerie})
                 </option>
               ))}
             </select>
@@ -65,10 +66,10 @@ export default async function NuevoSoportePage({
               placeholder="Describí el problema, desde cuándo ocurre y si hay mensajes de error..."
             />
           </Field>
-          <button type="submit" className="btn-primary w-fit">
+          <SubmitButton className="btn-primary w-fit">
             Enviar solicitud
-          </button>
-        </form>
+          </SubmitButton>
+        </GuardedForm>
       </Panel>
     </div>
   );

@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deleteCliente, updateCliente } from "@/app/actions";
-import { prisma } from "@/lib/prisma";
+import {
+  createCloudUser,
+  deleteCliente,
+  updateCliente,
+} from "@/app/actions";
+import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
+import { prismaPg } from "@/lib/prisma";
+import { getCliente } from "@/lib/clientes";
 import {
   Badge,
   EmptyState,
@@ -13,37 +19,52 @@ import {
   inputClass,
   estadoTone,
 } from "@/components/ui";
-import {formatDate, labelEstado, machineName } from "@/lib/utils";
+import {
+  formatDate,
+  labelEstado,
+  machineName,
+  mantenimientoTitulo,
+} from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClienteDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ cloudUser?: string }>;
 }) {
-  const { id } = await params;
-  const cliente = await prisma.cliente.findUnique({
-    where: { id },
-    include: {
-      maquinas: {
-        orderBy: { creadoEn: "desc" },
-        include: {
-          catalogo: true,
-          mantenimientos: {
-            orderBy: { fecha: "desc" },
-            take: 3,
-          },
-          _count: { select: { mantenimientos: true } },
-        },
-      },
-    },
-  });
+  const { id: idParam } = await params;
+  const { cloudUser } = await searchParams;
+  const id = Number(idParam);
+  if (!Number.isInteger(id)) notFound();
 
+  const cliente = await getCliente(id);
   if (!cliente) notFound();
+
+  const [unidades, cloudUsers] = await Promise.all([
+    prismaPg.clienteMaquina.findMany({
+      where: { idCliente: id },
+      orderBy: { fechaCreacion: "desc" },
+      include: {
+        maquina: true,
+        mantenimientos: {
+          orderBy: { solicitado: "desc" },
+          take: 3,
+        },
+        _count: { select: { mantenimientos: true } },
+      },
+    }),
+    prismaPg.cloudUser.findMany({
+      where: { clienteId: id },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   const update = updateCliente.bind(null, cliente.id);
   const remove = deleteCliente.bind(null, cliente.id);
+  const createVoxelUser = createCloudUser.bind(null, cliente.id);
 
   return (
     <div>
@@ -51,8 +72,8 @@ export default async function ClienteDetallePage({
         title={cliente.nombre}
         description={
           cliente.empresa
-            ? `${cliente.empresa} · ficha del cliente y sus equipos AGH`
-            : "Ficha del cliente y sus equipos AGH"
+            ? `${cliente.empresa} · PostgreSQL · tabla clientes`
+            : "PostgreSQL · tabla clientes"
         }
         action={
           <div className="flex flex-wrap gap-2">
@@ -66,14 +87,15 @@ export default async function ClienteDetallePage({
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <Panel>
-              <h3 className="brand-font mb-4 text-lg font-semibold text-white">
-                Datos del cliente
-              </h3>
-          <form action={update} className="grid gap-4">
+          <h3 className="brand-font mb-4 text-lg font-semibold text-white">
+            Datos del cliente
+          </h3>
+          <GuardedForm action={update} className="grid gap-4">
             <Field label="Nombre *">
               <input
                 name="nombre"
                 required
+                maxLength={100}
                 defaultValue={cliente.nombre}
                 className={inputClass}
               />
@@ -81,6 +103,7 @@ export default async function ClienteDetallePage({
             <Field label="Empresa">
               <input
                 name="empresa"
+                maxLength={200}
                 defaultValue={cliente.empresa ?? ""}
                 className={inputClass}
               />
@@ -89,44 +112,47 @@ export default async function ClienteDetallePage({
               <input
                 name="email"
                 type="email"
+                maxLength={200}
                 defaultValue={cliente.email ?? ""}
                 className={inputClass}
               />
             </Field>
-            <Field label="Teléfono">
-              <input
-                name="telefono"
-                defaultValue={cliente.telefono ?? ""}
+            <Field label="Activo">
+              <select
+                name="activo"
+                defaultValue={String(cliente.activo ?? 1)}
                 className={inputClass}
-              />
-            </Field>
-            <Field label="Dirección">
-              <input
-                name="direccion"
-                defaultValue={cliente.direccion ?? ""}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Notas">
-              <textarea
-                name="notas"
-                rows={3}
-                defaultValue={cliente.notas ?? ""}
-                className={inputClass}
-              />
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              <button type="submit" className="btn-primary">
-                Guardar cambios
-              </button>
-              <button
-                formAction={remove}
-                className="btn-ghost text-[var(--danger)]"
               >
-                Eliminar cliente
-              </button>
+                <option value="1">Sí</option>
+                <option value="0">No</option>
+              </select>
+            </Field>
+            <div className="rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 text-sm sm:col-span-2">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-[var(--ink-muted)]">ID</p>
+                  <p className="mt-1 font-mono text-white">{cliente.id}</p>
+                </div>
+                <div>
+                  <p className="text-[var(--ink-muted)]">cliente_id</p>
+                  <p className="mt-1 font-mono text-white">
+                    {cliente.clienteId ?? "—"}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-3 text-[var(--ink-muted)]">Token</p>
+              <p className="mt-1 break-all font-mono text-xs text-white">
+                {cliente.token}
+              </p>
+              <p className="mt-2 text-xs text-[var(--ink-muted)]">
+                Creado: {formatDate(cliente.fechaCreacion)}
+              </p>
             </div>
-          </form>
+            <div className="flex flex-wrap gap-2">
+              <SubmitButton>Guardar cambios</SubmitButton>
+              <DangerButton formAction={remove}>Eliminar cliente</DangerButton>
+            </div>
+          </GuardedForm>
         </Panel>
 
         <div className="space-y-4">
@@ -136,12 +162,11 @@ export default async function ClienteDetallePage({
                 Equipos del cliente
               </h3>
               <span className="text-sm text-[var(--ink-muted)]">
-                {cliente.maquinas.length} registrado
-                {cliente.maquinas.length === 1 ? "" : "s"}
+                {unidades.length} registrado{unidades.length === 1 ? "" : "s"}
               </span>
             </div>
 
-            {cliente.maquinas.length === 0 ? (
+            {unidades.length === 0 ? (
               <EmptyState
                 title="Sin equipos"
                 description="Este cliente todavía no tiene dimensionadores registrados."
@@ -153,35 +178,41 @@ export default async function ClienteDetallePage({
               />
             ) : (
               <ul className="space-y-3">
-                {cliente.maquinas.map((maquina) => (
+                {unidades.map((unidad) => (
                   <li
-                    key={maquina.id}
+                    key={unidad.id}
                     className="rounded-lg border border-[var(--line)] p-4"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <Link
-                          href={`/maquinas/${maquina.id}`}
+                          href={`/maquinas/${unidad.id}`}
                           className="font-medium text-[var(--accent)] hover:underline"
                         >
-                          {machineName(maquina)}
+                          {machineName(unidad)}
                         </Link>
                         <p className="text-sm text-[var(--ink-muted)]">
-                          Nro. serie: {maquina.numeroSerie}
-                          {maquina.ubicacion ? ` · ${maquina.ubicacion}` : ""}
+                          ID máquina:{" "}
+                          <span className="font-mono text-white">
+                            {unidad.idMaquina}
+                          </span>
+                          {" · "}Nro. serie: {unidad.numeroSerie}
+                          {unidad.sitio ? ` · ${unidad.sitio}` : ""}
                         </p>
                       </div>
                       <Badge>
-                        {maquina._count.mantenimientos} trabajo
-                        {maquina._count.mantenimientos === 1 ? "" : "s"}
+                        {unidad._count.mantenimientos} trabajo
+                        {unidad._count.mantenimientos === 1 ? "" : "s"}
                       </Badge>
                     </div>
-                    {maquina.mantenimientos[0] ? (
+                    {unidad.mantenimientos[0] ? (
                       <p className="mt-3 text-sm text-[var(--ink-muted)]">
-                        Último: {maquina.mantenimientos[0].titulo} ·{" "}
-                        {formatDate(maquina.mantenimientos[0].fecha)} ·{" "}
-                        <Badge tone={estadoTone(maquina.mantenimientos[0].estado)}>
-                          {labelEstado(maquina.mantenimientos[0].estado)}
+                        Último: {mantenimientoTitulo(unidad.mantenimientos[0])} ·{" "}
+                        {formatDate(unidad.mantenimientos[0].solicitado)} ·{" "}
+                        <Badge
+                          tone={estadoTone(unidad.mantenimientos[0].estado)}
+                        >
+                          {labelEstado(unidad.mantenimientos[0].estado)}
                         </Badge>
                       </p>
                     ) : null}
@@ -189,6 +220,95 @@ export default async function ClienteDetallePage({
                 ))}
               </ul>
             )}
+          </Panel>
+
+          <Panel>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div>
+                <h3 className="brand-font text-lg font-semibold text-white">
+                  Usuarios de Voxel Cloud
+                </h3>
+                <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                  Accesos asociados a este cliente en cloud_users.
+                </p>
+              </div>
+              <Badge>{cloudUsers.length}</Badge>
+            </div>
+
+            {cloudUser === "created" ? (
+              <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+                Usuario de Voxel Cloud creado correctamente.
+              </p>
+            ) : null}
+
+            {cloudUsers.length > 0 ? (
+              <ul className="mb-5 space-y-2">
+                {cloudUsers.map((user) => (
+                  <li
+                    key={user.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--line)] p-3"
+                  >
+                    <div>
+                      <p className="font-medium text-white">{user.email}</p>
+                      <p className="text-xs text-[var(--ink-muted)]">
+                        {user.fullName || "Sin nombre"} · Rol:{" "}
+                        {user.role || "viewer"}
+                        {user.lastLogin
+                          ? ` · Último acceso: ${formatDate(user.lastLogin)}`
+                          : " · Sin accesos"}
+                      </p>
+                    </div>
+                    <Badge tone={user.isActive === false ? "danger" : "ok"}>
+                      {user.isActive === false ? "Inactivo" : "Activo"}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mb-5 text-sm text-[var(--ink-muted)]">
+                Este cliente todavía no tiene usuarios en Voxel Cloud.
+              </p>
+            )}
+
+            <h4 className="mb-3 font-medium text-white">Crear usuario</h4>
+            <GuardedForm
+              action={createVoxelUser}
+              className="grid gap-4 sm:grid-cols-2"
+            >
+              <Field label="Usuario / email *">
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  maxLength={200}
+                  defaultValue={cliente.email ?? ""}
+                  autoComplete="off"
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Nombre">
+                <input
+                  name="fullName"
+                  maxLength={150}
+                  defaultValue={cliente.nombre}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Contraseña *">
+                <input
+                  name="password"
+                  type="password"
+                  required
+                  minLength={6}
+                  maxLength={100}
+                  autoComplete="new-password"
+                  className={inputClass}
+                />
+              </Field>
+              <div className="flex items-end">
+                <SubmitButton>Crear acceso a Voxel Cloud</SubmitButton>
+              </div>
+            </GuardedForm>
           </Panel>
         </div>
       </div>

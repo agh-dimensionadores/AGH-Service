@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client-pg"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Tabla existente — no usar db push sobre esta base
+model Cliente {
+  id            Int              @id @default(autoincrement())
+  nombre        String           @db.VarChar(100)
+  empresa       String?          @db.VarChar(200)
+  email         String?          @db.VarChar(200)
+  token         String           @db.VarChar(100)
+  activo        Int?
+  fechaCreacion DateTime?        @map("fecha_creacion")
+  clienteId     Int?             @map("cliente_id")
+  instalaciones ClienteMaquina[]
+
+  @@map("clientes")
+}
+
+model Maquina {
+  idmachine     Int              @id @default(autoincrement())
+  marca         String           @db.VarChar(100)
+  modelo        String?          @db.VarChar(100)
+  instalaciones ClienteMaquina[]
+
+  @@map("maquinas")
+}
+
+model ClienteMaquina {
+  id             Int                     @id @default(autoincrement())
+  idCliente      Int                     @map("id_cliente")
+  idMaquina      Int                     @map("id_maquina")
+  sitio          String?                 @db.VarChar(200)
+  numeroSerie    String                  @unique @map("numero_serie") @db.VarChar(100)
+  fechaCompra    DateTime?               @map("fecha_compra") @db.Date
+  fechaCreacion  DateTime?               @default(now()) @map("fecha_creacion")
+  cliente        Cliente                 @relation(fields: [idCliente], references: [id])
+  maquina        Maquina                 @relation(fields: [idMaquina], references: [idmachine])
+  mantenimientos ClienteMantenimiento[]
+
+  @@map("clientes_maquinas")
+}
+
+model ClienteMantenimiento {
+  id                Int            @id @default(autoincrement())
+  idClienteMaquina  Int            @map("id_cliente_maquina")
+  tipo              String         @db.VarChar(50)
+  descripcion       String?
+  solicitado        DateTime       @default(now())
+  arreglado         DateTime?
+  estado            String         @default("abierto") @db.VarChar(30)
+  instalacion       ClienteMaquina @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
+
+  @@map("clientes_mantenimientos")
+}
+
+/// Usuarios existentes de Voxel Cloud.
+/// clienteId es la asociación con clientes.id, aunque la tabla no declara FK.
+model CloudUser {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique @db.VarChar(200)
+  fullName     String?   @map("full_name") @db.VarChar(150)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         String?   @default("viewer") @db.VarChar(50)
+  clienteId    Int       @map("cliente_id")
+  isActive     Boolean?  @default(true) @map("is_active")
+  createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastLogin    DateTime? @map("last_login") @db.Timestamptz(6)
+
+  @@index([clienteId])
+  @@map("cloud_users")
+}

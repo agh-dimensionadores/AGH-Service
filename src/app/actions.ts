@@ -1,9 +1,9 @@
 "use server";
 
+import { createHash, randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { saveUploadedImage } from "@/lib/uploads";
+import { prismaPg } from "@/lib/prisma";
 
 function str(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -15,11 +15,17 @@ function optionalStr(formData: FormData, key: string) {
   return value || null;
 }
 
-function optionalFloat(formData: FormData, key: string) {
+function optionalInt(formData: FormData, key: string) {
   const value = str(formData, key);
   if (!value) return null;
   const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  return Number.isInteger(n) ? n : null;
+}
+
+function requiredInt(formData: FormData, key: string) {
+  const n = optionalInt(formData, key);
+  if (n == null) throw new Error(`${key} es obligatorio`);
+  return n;
 }
 
 function optionalDate(formData: FormData, key: string) {
@@ -28,221 +34,227 @@ function optionalDate(formData: FormData, key: string) {
   return new Date(value);
 }
 
-function fileFrom(formData: FormData, key: string) {
-  const value = formData.get(key);
-  return value instanceof File ? value : null;
+function newClientToken() {
+  return randomBytes(24).toString("hex").slice(0, 100);
+}
+
+function touch(...paths: string[]) {
+  for (const path of paths) revalidatePath(path);
 }
 
 export async function createCliente(formData: FormData) {
   const nombre = str(formData, "nombre");
   if (!nombre) throw new Error("El nombre es obligatorio");
 
-  const cliente = await prisma.cliente.create({
-    data: {
-      nombre,
-      empresa: optionalStr(formData, "empresa"),
-      email: optionalStr(formData, "email"),
-      telefono: optionalStr(formData, "telefono"),
-      direccion: optionalStr(formData, "direccion"),
-      notas: optionalStr(formData, "notas"),
-    },
-  });
+  const empresa = optionalStr(formData, "empresa");
+  const email = optionalStr(formData, "email");
+  const token = newClientToken();
+  const activo = optionalInt(formData, "activo") ?? 1;
 
-  revalidatePath("/clientes");
-  revalidatePath("/");
-  redirect(`/clientes/${cliente.id}`);
-}
+  // Un solo round-trip a Render: insert + set cliente_id = id
+  const rows = await prismaPg.$queryRaw<{ id: number }[]>`
+    WITH inserted AS (
+      INSERT INTO clientes (nombre, empresa, email, token, activo, fecha_creacion)
+      VALUES (${nombre}, ${empresa}, ${email}, ${token}, ${activo}, NOW())
+      RETURNING id
+    )
+    UPDATE clientes AS c
+    SET cliente_id = inserted.id
+    FROM inserted
+    WHERE c.id = inserted.id
+    RETURNING c.id
+  `;
 
-export async function updateCliente(id: string, formData: FormData) {
-  const nombre = str(formData, "nombre");
-  if (!nombre) throw new Error("El nombre es obligatorio");
+  const id = rows[0]?.id;
+  if (!id) throw new Error("No se pudo crear el cliente");
 
-  await prisma.cliente.update({
-    where: { id },
-    data: {
-      nombre,
-      empresa: optionalStr(formData, "empresa"),
-      email: optionalStr(formData, "email"),
-      telefono: optionalStr(formData, "telefono"),
-      direccion: optionalStr(formData, "direccion"),
-      notas: optionalStr(formData, "notas"),
-    },
-  });
-
-  revalidatePath(`/clientes/${id}`);
-  revalidatePath("/clientes");
+  touch("/clientes");
   redirect(`/clientes/${id}`);
 }
 
-export async function deleteCliente(id: string) {
-  await prisma.cliente.delete({ where: { id } });
-  revalidatePath("/clientes");
-  revalidatePath("/");
+export async function updateCliente(id: number, formData: FormData) {
+  const nombre = str(formData, "nombre");
+  if (!nombre) throw new Error("El nombre es obligatorio");
+
+  await prismaPg.cliente.update({
+    where: { id },
+    data: {
+      nombre,
+      empresa: optionalStr(formData, "empresa"),
+      email: optionalStr(formData, "email"),
+      activo: optionalInt(formData, "activo") ?? 1,
+    },
+  });
+
+  touch(`/clientes/${id}`, "/clientes");
+  redirect(`/clientes/${id}`);
+}
+
+export async function deleteCliente(id: number) {
+  await prismaPg.cliente.delete({ where: { id } });
+  touch("/clientes");
   redirect("/clientes");
 }
 
+export async function createCloudUser(clienteId: number, formData: FormData) {
+  const email = str(formData, "email").toLowerCase();
+  const password = str(formData, "password");
+  const fullName = optionalStr(formData, "fullName");
+
+  if (!email || !email.includes("@")) {
+    throw new Error("Ingresá un email válido para el usuario");
+  }
+  if (password.length < 6) {
+    throw new Error("La contraseña debe tener al menos 6 caracteres");
+  }
+
+  const cliente = await prismaPg.cliente.findUnique({
+    where: { id: clienteId },
+    select: { id: true },
+  });
+  if (!cliente) throw new Error("El cliente no existe");
+
+  const exists = await prismaPg.cloudUser.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+  if (exists) throw new Error("Ya existe un usuario de Voxel Cloud con ese email");
+
+  await prismaPg.cloudUser.create({
+    data: {
+      email,
+      fullName,
+      // Voxel Cloud actualmente valida hashes SHA-256 hexadecimales.
+      passwordHash: createHash("sha256").update(password).digest("hex"),
+      role: "viewer",
+      clienteId,
+      isActive: true,
+      createdAt: new Date(),
+    },
+  });
+
+  touch(`/clientes/${clienteId}`);
+  redirect(`/clientes/${clienteId}?cloudUser=created`);
+}
+
+/** Catálogo: tabla maquinas */
 export async function createCatalogoMaquina(formData: FormData) {
   const marca = str(formData, "marca");
-  const nombre = str(formData, "nombre");
-  if (!marca || !nombre) {
-    throw new Error("Marca y nombre son obligatorios");
-  }
+  const modelo = optionalStr(formData, "modelo");
+  if (!marca) throw new Error("La marca es obligatoria");
 
-  const imagen = await saveUploadedImage(fileFrom(formData, "imagen"));
-
-  await prisma.catalogoMaquina.create({
-    data: { marca, nombre, imagen },
+  await prismaPg.maquina.create({
+    data: { marca, modelo },
   });
 
-  revalidatePath("/maquinas");
+  touch("/maquinas");
   redirect("/maquinas");
 }
 
-export async function deleteCatalogoMaquina(id: string) {
-  const usadas = await prisma.maquina.count({ where: { catalogoId: id } });
+export async function deleteCatalogoMaquina(id: number) {
+  const usadas = await prismaPg.clienteMaquina.count({
+    where: { idMaquina: id },
+  });
   if (usadas > 0) {
-    throw new Error("No se puede eliminar: ya hay equipos asignados de este modelo");
+    throw new Error("No se puede eliminar: hay unidades asignadas de este modelo");
   }
-  await prisma.catalogoMaquina.delete({ where: { id } });
-  revalidatePath("/maquinas");
+  await prismaPg.maquina.delete({ where: { idmachine: id } });
+  touch("/maquinas");
   redirect("/maquinas");
 }
 
+/** Asignar unidad: clientes_maquinas */
 export async function asignarMaquina(formData: FormData) {
-  const catalogoId = str(formData, "catalogoId");
+  const idCliente = requiredInt(formData, "clienteId");
+  const idMaquina = requiredInt(formData, "catalogoId");
   const numeroSerie = str(formData, "numeroSerie");
-  const clienteId = str(formData, "clienteId");
+  if (!numeroSerie) throw new Error("El nro. de serie es obligatorio");
 
-  if (!catalogoId || !numeroSerie || !clienteId) {
-    throw new Error("Modelo, nro. de serie y cliente son obligatorios");
-  }
-
-  const maquina = await prisma.maquina.create({
+  const unidad = await prismaPg.clienteMaquina.create({
     data: {
-      catalogoId,
+      idCliente,
+      idMaquina,
       numeroSerie,
-      clienteId,
-      descripcion: optionalStr(formData, "descripcion"),
-      ubicacion: optionalStr(formData, "ubicacion"),
-      estadoEquipo: str(formData, "estadoEquipo") || "operativa",
+      sitio: optionalStr(formData, "ubicacion"),
       fechaCompra: optionalDate(formData, "fechaCompra"),
     },
   });
 
-  revalidatePath("/maquinas");
-  revalidatePath(`/clientes/${clienteId}`);
-  revalidatePath("/");
-  redirect(`/maquinas/${maquina.id}`);
+  touch("/maquinas", `/clientes/${idCliente}`);
+  redirect(`/maquinas/${unidad.id}`);
 }
 
-export async function updateMaquina(id: string, formData: FormData) {
-  const catalogoId = str(formData, "catalogoId");
+export async function updateMaquina(id: number, formData: FormData) {
+  const idCliente = requiredInt(formData, "clienteId");
+  const idMaquina = requiredInt(formData, "catalogoId");
   const numeroSerie = str(formData, "numeroSerie");
-  const clienteId = str(formData, "clienteId");
+  if (!numeroSerie) throw new Error("El nro. de serie es obligatorio");
 
-  if (!catalogoId || !numeroSerie || !clienteId) {
-    throw new Error("Modelo, nro. de serie y cliente son obligatorios");
-  }
-
-  await prisma.maquina.update({
+  await prismaPg.clienteMaquina.update({
     where: { id },
     data: {
-      catalogoId,
+      idCliente,
+      idMaquina,
       numeroSerie,
-      clienteId,
-      descripcion: optionalStr(formData, "descripcion"),
-      ubicacion: optionalStr(formData, "ubicacion"),
-      estadoEquipo: str(formData, "estadoEquipo") || "operativa",
+      sitio: optionalStr(formData, "ubicacion"),
       fechaCompra: optionalDate(formData, "fechaCompra"),
     },
   });
 
-  revalidatePath(`/maquinas/${id}`);
-  revalidatePath("/maquinas");
-  revalidatePath(`/clientes/${clienteId}`);
+  touch(`/maquinas/${id}`, "/maquinas", `/clientes/${idCliente}`);
   redirect(`/maquinas/${id}`);
 }
 
-export async function deleteMaquina(id: string) {
-  const maquina = await prisma.maquina.delete({ where: { id } });
-  revalidatePath("/maquinas");
-  revalidatePath(`/clientes/${maquina.clienteId}`);
-  revalidatePath("/");
+export async function deleteMaquina(id: number) {
+  const unidad = await prismaPg.clienteMaquina.delete({ where: { id } });
+  touch("/maquinas", `/clientes/${unidad.idCliente}`);
   redirect("/maquinas");
 }
 
 export async function createMantenimiento(formData: FormData) {
-  const maquinaId = str(formData, "maquinaId");
+  const idClienteMaquina = requiredInt(formData, "maquinaId");
   const tipo = str(formData, "tipo");
-  const titulo = str(formData, "titulo");
-  const descripcion = str(formData, "descripcion");
+  const descripcion = optionalStr(formData, "descripcion");
+  if (!tipo) throw new Error("El tipo es obligatorio");
 
-  if (!maquinaId || !tipo || !titulo || !descripcion) {
-    throw new Error("Máquina, tipo, título y descripción son obligatorios");
-  }
-
-  const mantenimiento = await prisma.mantenimiento.create({
+  await prismaPg.clienteMantenimiento.create({
     data: {
-      maquinaId,
+      idClienteMaquina,
       tipo,
-      titulo,
       descripcion,
-      tecnico: optionalStr(formData, "tecnico"),
-      piezas: optionalStr(formData, "piezas"),
-      costo: optionalFloat(formData, "costo"),
-      estado: str(formData, "estado") || "completado",
-      fecha: optionalDate(formData, "fecha") ?? new Date(),
-      proximo: optionalDate(formData, "proximo"),
-    },
-    include: { maquina: true },
-  });
-
-  revalidatePath("/mantenimientos");
-  revalidatePath(`/maquinas/${maquinaId}`);
-  revalidatePath(`/clientes/${mantenimiento.maquina.clienteId}`);
-  revalidatePath("/");
-  redirect(`/maquinas/${maquinaId}`);
-}
-
-export async function updateMantenimiento(id: string, formData: FormData) {
-  const maquinaId = str(formData, "maquinaId");
-  const tipo = str(formData, "tipo");
-  const titulo = str(formData, "titulo");
-  const descripcion = str(formData, "descripcion");
-
-  if (!maquinaId || !tipo || !titulo || !descripcion) {
-    throw new Error("Máquina, tipo, título y descripción son obligatorios");
-  }
-
-  await prisma.mantenimiento.update({
-    where: { id },
-    data: {
-      maquinaId,
-      tipo,
-      titulo,
-      descripcion,
-      tecnico: optionalStr(formData, "tecnico"),
-      piezas: optionalStr(formData, "piezas"),
-      costo: optionalFloat(formData, "costo"),
-      estado: str(formData, "estado") || "completado",
-      fecha: optionalDate(formData, "fecha") ?? new Date(),
-      proximo: optionalDate(formData, "proximo"),
+      estado: str(formData, "estado") || "abierto",
+      solicitado: optionalDate(formData, "solicitado") ?? new Date(),
+      arreglado: optionalDate(formData, "arreglado"),
     },
   });
 
-  revalidatePath(`/mantenimientos/${id}`);
-  revalidatePath(`/maquinas/${maquinaId}`);
-  revalidatePath("/mantenimientos");
-  redirect(`/maquinas/${maquinaId}`);
+  touch("/mantenimientos", `/maquinas/${idClienteMaquina}`);
+  redirect(`/maquinas/${idClienteMaquina}`);
 }
 
-export async function deleteMantenimiento(id: string) {
-  const item = await prisma.mantenimiento.delete({
+export async function updateMantenimiento(id: number, formData: FormData) {
+  const idClienteMaquina = requiredInt(formData, "maquinaId");
+  const tipo = str(formData, "tipo");
+  if (!tipo) throw new Error("El tipo es obligatorio");
+
+  await prismaPg.clienteMantenimiento.update({
     where: { id },
-    include: { maquina: true },
+    data: {
+      idClienteMaquina,
+      tipo,
+      descripcion: optionalStr(formData, "descripcion"),
+      estado: str(formData, "estado") || "abierto",
+      solicitado: optionalDate(formData, "solicitado") ?? new Date(),
+      arreglado: optionalDate(formData, "arreglado"),
+    },
   });
-  revalidatePath(`/maquinas/${item.maquinaId}`);
-  revalidatePath("/mantenimientos");
-  revalidatePath(`/clientes/${item.maquina.clienteId}`);
-  redirect(`/maquinas/${item.maquinaId}`);
+
+  touch(`/mantenimientos/${id}`, `/maquinas/${idClienteMaquina}`, "/mantenimientos");
+  redirect(`/maquinas/${idClienteMaquina}`);
+}
+
+export async function deleteMantenimiento(id: number) {
+  const item = await prismaPg.clienteMantenimiento.delete({ where: { id } });
+  touch(`/maquinas/${item.idClienteMaquina}`, "/mantenimientos");
+  redirect(`/maquinas/${item.idClienteMaquina}`);
 }

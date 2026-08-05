@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireCliente } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
 import {
   Badge,
   PageHeader,
@@ -9,7 +9,13 @@ import {
   SecondaryLink,
   estadoTone,
 } from "@/components/ui";
-import {formatDate, formatMoney, labelEstado, machineName } from "@/lib/utils";
+import {
+  equipoEstado,
+  formatDate,
+  labelEstado,
+  machineName,
+  mantenimientoTitulo,
+} from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -19,27 +25,31 @@ export default async function PortalMaquinaPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await requireCliente();
-  const { id } = await params;
+  const { id: idParam } = await params;
+  const id = Number(idParam);
+  if (!Number.isInteger(id)) notFound();
 
-  const maquina = await prisma.maquina.findFirst({
-    where: { id, clienteId: session.clienteId! },
+  const unidad = await prismaPg.clienteMaquina.findFirst({
+    where: { id, idCliente: session.clienteId! },
     include: {
-      catalogo: true,
-      mantenimientos: { orderBy: { fecha: "desc" } },
+      maquina: true,
+      mantenimientos: { orderBy: { solicitado: "desc" } },
     },
   });
 
-  if (!maquina) notFound();
+  if (!unidad) notFound();
+
+  const estado = equipoEstado(unidad.mantenimientos);
 
   return (
     <div>
       <PageHeader
-        title={`${machineName(maquina)}`}
-        description={`Nro. serie ${maquina.numeroSerie}`}
+        title={machineName(unidad)}
+        description={`Nro. serie ${unidad.numeroSerie}`}
         action={
           <div className="flex flex-wrap gap-2">
             <SecondaryLink href="/portal">Volver</SecondaryLink>
-            <PrimaryLink href={`/portal/soporte/nuevo?maquinaId=${maquina.id}`}>
+            <PrimaryLink href={`/portal/soporte/nuevo?maquinaId=${unidad.id}`}>
               Solicitar soporte
             </PrimaryLink>
           </div>
@@ -55,31 +65,29 @@ export default async function PortalMaquinaPage({
             <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Estado</dt>
               <dd>
-                <Badge tone={estadoTone(maquina.estadoEquipo)}>
-                  {labelEstado(maquina.estadoEquipo)}
-                </Badge>
+                <Badge tone={estadoTone(estado)}>{labelEstado(estado)}</Badge>
               </dd>
             </div>
             <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Marca</dt>
-              <dd className="text-white">{maquina.catalogo.marca}</dd>
+              <dd className="text-white">{unidad.maquina.marca}</dd>
             </div>
             <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Modelo</dt>
-              <dd className="text-white">{maquina.catalogo.nombre}</dd>
+              <dd className="text-white">{unidad.maquina.modelo || "—"}</dd>
             </div>
             <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Nro. de serie</dt>
-              <dd className="font-mono text-white">{maquina.numeroSerie}</dd>
+              <dd className="font-mono text-white">{unidad.numeroSerie}</dd>
             </div>
             <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
-              <dt className="text-[var(--ink-muted)]">Ubicación</dt>
-              <dd className="text-white">{maquina.ubicacion || "—"}</dd>
+              <dt className="text-[var(--ink-muted)]">Sitio</dt>
+              <dd className="text-white">{unidad.sitio || "—"}</dd>
             </div>
             <div>
-              <dt className="text-[var(--ink-muted)]">Descripción</dt>
+              <dt className="text-[var(--ink-muted)]">Fecha de compra</dt>
               <dd className="mt-1 text-white">
-                {maquina.descripcion || "Sin descripción"}
+                {formatDate(unidad.fechaCompra)}
               </dd>
             </div>
           </dl>
@@ -89,36 +97,32 @@ export default async function PortalMaquinaPage({
           <h3 className="brand-font mb-4 text-lg font-semibold text-white">
             Historial de reparaciones
           </h3>
-          {maquina.mantenimientos.length === 0 ? (
+          {unidad.mantenimientos.length === 0 ? (
             <p className="text-sm text-[var(--ink-muted)]">
               Todavía no hay trabajos registrados en esta máquina.
             </p>
           ) : (
             <ol className="relative space-y-0 border-l border-[var(--line)] pl-5">
-              {maquina.mantenimientos.map((item) => (
+              {unidad.mantenimientos.map((item) => (
                 <li key={item.id} className="relative pb-5 last:pb-0">
                   <span className="absolute -left-[0.33rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium text-white">{item.titulo}</p>
+                    <p className="font-medium text-white">
+                      {mantenimientoTitulo(item)}
+                    </p>
                     <Badge tone={estadoTone(item.estado)}>
                       {labelEstado(item.estado)}
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                    {item.tipo} · {formatDate(item.fecha)}
-                    {item.tecnico ? ` · ${item.tecnico}` : ""}
+                    {item.tipo} · {formatDate(item.solicitado)}
+                    {item.arreglado
+                      ? ` · Arreglado ${formatDate(item.arreglado)}`
+                      : ""}
                   </p>
-                  <p className="mt-2 text-sm leading-relaxed text-[#d8e0da]">
-                    {item.descripcion}
-                  </p>
-                  {item.piezas ? (
-                    <p className="mt-2 text-xs text-[var(--ink-muted)]">
-                      Piezas: {item.piezas}
-                    </p>
-                  ) : null}
-                  {item.costo != null ? (
-                    <p className="mt-1 text-xs text-[var(--ink-muted)]">
-                      Costo: {formatMoney(item.costo)}
+                  {item.descripcion ? (
+                    <p className="mt-2 text-sm leading-relaxed text-[#d8e0da]">
+                      {item.descripcion}
                     </p>
                   ) : null}
                 </li>

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { getClientesMap, clienteLabel } from "@/lib/clientes";
 import { DonutChart } from "@/components/donut";
 import {
   IconAlert,
@@ -14,12 +15,14 @@ import { Badge, Panel, TopBar, estadoTone } from "@/components/ui";
 import {
   countdownTone,
   daysUntil,
+  equipoEstado,
   formatDate,
   formatDateTime,
   labelCountdown,
   labelEstado,
   machineName,
   machineThumbStyle,
+  mantenimientoTitulo,
 } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -28,46 +31,59 @@ export default async function DashboardPage() {
   const session = await getSession();
   const nombre = session?.nombre?.split(" ")[0] || "Micaela";
 
-  const [maquinas, pendientes, urgentes, proximos, recientes, actividad] =
+  const [unidades, pendientes, abiertos, proximos, recientes, actividad] =
     await Promise.all([
-      prisma.maquina.findMany({ include: { cliente: true, catalogo: true } }),
-      prisma.mantenimiento.count({
-        where: { estado: { in: ["programado", "en_curso"] } },
-      }),
-      prisma.maquina.count({ where: { estadoEquipo: "fuera" } }),
-      prisma.mantenimiento.findMany({
-        where: {
-          OR: [
-            { estado: "programado" },
-            { proximo: { not: null } },
-          ],
+      prismaPg.clienteMaquina.findMany({
+        include: {
+          maquina: true,
+          mantenimientos: { select: { estado: true } },
         },
-        orderBy: [{ proximo: "asc" }, { fecha: "asc" }],
-        take: 5,
-        include: { maquina: { include: { cliente: true, catalogo: true } } },
       }),
-      prisma.maquina.findMany({
+      prismaPg.clienteMantenimiento.count({
+        where: { estado: { in: ["abierto", "en_curso"] } },
+      }),
+      prismaPg.clienteMantenimiento.count({
+        where: { estado: "abierto" },
+      }),
+      prismaPg.clienteMantenimiento.findMany({
+        where: { estado: { in: ["abierto", "en_curso"] } },
+        orderBy: { solicitado: "asc" },
+        take: 5,
+        include: { instalacion: { include: { maquina: true } } },
+      }),
+      prismaPg.clienteMaquina.findMany({
         take: 4,
-        orderBy: { creadoEn: "desc" },
-        include: { cliente: true, catalogo: true },
+        orderBy: { fechaCreacion: "desc" },
+        include: {
+          maquina: true,
+          mantenimientos: { select: { estado: true } },
+        },
       }),
-      prisma.mantenimiento.findMany({
+      prismaPg.clienteMantenimiento.findMany({
         take: 5,
-        orderBy: { creadoEn: "desc" },
-        include: { maquina: { include: { cliente: true, catalogo: true } } },
+        orderBy: { solicitado: "desc" },
+        include: { instalacion: { include: { maquina: true } } },
       }),
     ]);
 
-  const operativa = maquinas.filter((m) => m.estadoEquipo === "operativa").length;
-  const proximo = maquinas.filter((m) => m.estadoEquipo === "proximo").length;
-  const fuera = maquinas.filter((m) => m.estadoEquipo === "fuera").length;
-  const total = maquinas.length || 1;
+  const clientesMap = await getClientesMap([
+    ...unidades.map((u) => u.idCliente),
+    ...proximos.map((p) => p.instalacion.idCliente),
+    ...recientes.map((u) => u.idCliente),
+    ...actividad.map((a) => a.instalacion.idCliente),
+  ]);
+
+  const estados = unidades.map((u) => equipoEstado(u.mantenimientos));
+  const operativa = estados.filter((e) => e === "operativa").length;
+  const proximo = estados.filter((e) => e === "proximo").length;
+  const fuera = estados.filter((e) => e === "fuera").length;
+  const total = unidades.length || 1;
   const disponibilidad = Math.round((operativa / total) * 100);
 
   const kpis = [
     {
       label: "Máquinas",
-      value: String(maquinas.length),
+      value: String(unidades.length),
       icon: <IconMachine className="h-5 w-5" />,
       tone: "ok" as const,
     },
@@ -79,8 +95,8 @@ export default async function DashboardPage() {
       hint: "pendientes",
     },
     {
-      label: "Urgentes",
-      value: String(urgentes),
+      label: "Abiertos",
+      value: String(abiertos),
       icon: <IconAlert className="h-5 w-5" />,
       tone: "warn" as const,
     },
@@ -96,7 +112,7 @@ export default async function DashboardPage() {
     <div>
       <TopBar
         title={`Bienvenida, ${nombre}`}
-        subtitle="Aquí tenés el estado general de tus equipos"
+        subtitle="Estado general desde PostgreSQL"
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -122,7 +138,7 @@ export default async function DashboardPage() {
         <Panel>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="brand-font text-lg font-semibold text-white">
-              Próximos mantenimientos
+              Mantenimientos pendientes
             </h3>
             <Link
               href="/mantenimientos"
@@ -133,50 +149,47 @@ export default async function DashboardPage() {
           </div>
           {proximos.length === 0 ? (
             <p className="text-sm text-[var(--ink-muted)]">
-              No hay mantenimientos próximos cargados.
+              No hay mantenimientos abiertos o en curso.
             </p>
           ) : (
             <ul className="space-y-3">
               {proximos.map((item) => {
-                const target = item.proximo ?? item.fecha;
-                const days = daysUntil(target);
+                const days = daysUntil(item.solicitado);
                 const tone = countdownTone(days);
                 return (
                   <li key={item.id}>
                     <Link
-                      href={`/maquinas/${item.maquinaId}`}
+                      href={`/maquinas/${item.idClienteMaquina}`}
                       className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 transition hover:border-[rgba(182,255,59,0.35)]"
                     >
                       <div
-                        className="h-12 w-14 shrink-0 rounded-lg bg-cover bg-center"
-                        style={
-                          item.maquina.catalogo.imagen
-                            ? {
-                                backgroundImage: `url(${item.maquina.catalogo.imagen})`,
-                              }
-                            : machineThumbStyle(item.maquina.catalogo.nombre)
-                        }
+                        className="h-12 w-14 shrink-0 rounded-lg"
+                        style={machineThumbStyle(
+                          item.instalacion.maquina.modelo ??
+                            item.instalacion.maquina.marca
+                        )}
                       />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-white">
-                          {machineName(item.maquina)}
+                          {machineName(item.instalacion)}
                           <span className="text-[var(--ink-muted)]">
                             {" "}
-                            · {item.titulo}
+                            · {item.tipo}
                           </span>
                         </p>
                         <p className="truncate text-sm text-[var(--ink-muted)]">
-                          {item.maquina.cliente.empresa ||
-                            item.maquina.cliente.nombre}
-                          {item.maquina.ubicacion
-                            ? ` · ${item.maquina.ubicacion}`
+                          {clienteLabel(
+                            clientesMap.get(item.instalacion.idCliente)
+                          )}
+                          {item.instalacion.sitio
+                            ? ` · ${item.instalacion.sitio}`
                             : ""}
                         </p>
                       </div>
                       <div className="text-right">
                         <Badge tone={tone}>{labelCountdown(days)}</Badge>
                         <p className="mt-1 text-xs text-[var(--ink-muted)]">
-                          {formatDate(target)}
+                          {formatDate(item.solicitado)}
                         </p>
                       </div>
                     </Link>
@@ -203,7 +216,7 @@ export default async function DashboardPage() {
             </li>
             <li className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-[var(--ink-muted)]">
-                <span className="status-dot warn" /> Próximo mantenimiento
+                <span className="status-dot warn" /> Con ticket abierto
               </span>
               <span className="text-white">
                 {proximo} ({Math.round((proximo / total) * 100)}%)
@@ -211,7 +224,7 @@ export default async function DashboardPage() {
             </li>
             <li className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-[var(--ink-muted)]">
-                <span className="status-dot danger" /> Fuera de servicio
+                <span className="status-dot danger" /> En reparación
               </span>
               <span className="text-white">
                 {fuera} ({Math.round((fuera / total) * 100)}%)
@@ -226,9 +239,9 @@ export default async function DashboardPage() {
               </p>
             </div>
             <div>
-              <p className="text-xs text-[var(--ink-muted)]">Tiempo medio entre fallas</p>
+              <p className="text-xs text-[var(--ink-muted)]">Unidades asignadas</p>
               <p className="brand-font mt-1 text-xl font-semibold text-white">
-                142 días
+                {unidades.length}
               </p>
             </div>
           </div>
@@ -249,38 +262,39 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {recientes.map((maquina) => (
-              <Link
-                key={maquina.id}
-                href={`/maquinas/${maquina.id}`}
-                className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 transition hover:border-[rgba(182,255,59,0.35)]"
-              >
-                <div
-                  className="machine-thumb mb-3 bg-cover bg-center"
-                  style={
-                    maquina.catalogo.imagen
-                      ? { backgroundImage: `url(${maquina.catalogo.imagen})` }
-                      : machineThumbStyle(maquina.catalogo.nombre)
-                  }
-                />
-                <p className="font-medium text-white">{machineName(maquina)}</p>
-                <p className="truncate text-xs text-[var(--ink-muted)]">
-                  {maquina.cliente.empresa || maquina.cliente.nombre}
-                </p>
-                <p className="mt-2 flex items-center gap-2 text-xs text-[var(--ink-muted)]">
-                  <span
-                    className={`status-dot ${
-                      maquina.estadoEquipo === "operativa"
-                        ? "ok"
-                        : maquina.estadoEquipo === "proximo"
-                          ? "warn"
-                          : "danger"
-                    }`}
+            {recientes.map((unidad) => {
+              const estado = equipoEstado(unidad.mantenimientos);
+              return (
+                <Link
+                  key={unidad.id}
+                  href={`/maquinas/${unidad.id}`}
+                  className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 transition hover:border-[rgba(182,255,59,0.35)]"
+                >
+                  <div
+                    className="machine-thumb mb-3"
+                    style={machineThumbStyle(
+                      unidad.maquina.modelo ?? unidad.maquina.marca
+                    )}
                   />
-                  {labelEstado(maquina.estadoEquipo)}
-                </p>
-              </Link>
-            ))}
+                  <p className="font-medium text-white">{machineName(unidad)}</p>
+                  <p className="truncate text-xs text-[var(--ink-muted)]">
+                    {clienteLabel(clientesMap.get(unidad.idCliente))}
+                  </p>
+                  <p className="mt-2 flex items-center gap-2 text-xs text-[var(--ink-muted)]">
+                    <span
+                      className={`status-dot ${
+                        estado === "operativa"
+                          ? "ok"
+                          : estado === "proximo"
+                            ? "warn"
+                            : "danger"
+                      }`}
+                    />
+                    {labelEstado(estado)}
+                  </p>
+                </Link>
+              );
+            })}
           </div>
         </Panel>
 
@@ -310,22 +324,24 @@ export default async function DashboardPage() {
                           : "bg-[var(--danger-dim)] text-[var(--danger)]"
                     }`}
                   >
-                    {item.estado === "completado" ? (
+                    {item.estado === "cerrado" ? (
                       <IconCheck className="h-3 w-3" />
-                    ) : item.estado === "programado" ? (
+                    ) : item.estado === "en_curso" ? (
                       <IconWrench className="h-3 w-3" />
                     ) : (
                       <IconAlert className="h-3 w-3" />
                     )}
                   </span>
                   <Link href={`/mantenimientos/${item.id}`} className="block">
-                    <p className="font-medium text-white">{item.titulo}</p>
+                    <p className="font-medium text-white">
+                      {mantenimientoTitulo(item)}
+                    </p>
                     <p className="text-sm text-[var(--ink-muted)]">
-                      {machineName(item.maquina)} ·{" "}
-                      {item.maquina.cliente.empresa || item.maquina.cliente.nombre}
+                      {machineName(item.instalacion)} ·{" "}
+                      {clienteLabel(clientesMap.get(item.instalacion.idCliente))}
                     </p>
                     <p className="mt-1 text-xs text-[var(--ink-muted)]">
-                      {formatDateTime(item.creadoEn)} · {labelEstado(item.estado)}
+                      {formatDateTime(item.solicitado)} · {labelEstado(item.estado)}
                     </p>
                   </Link>
                 </li>

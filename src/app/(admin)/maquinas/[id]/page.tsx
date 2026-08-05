@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteMaquina, updateMaquina } from "@/app/actions";
-import { prisma } from "@/lib/prisma";
+import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
+import { prismaPg } from "@/lib/prisma";
+import { listClientes, getCliente, clienteLabel } from "@/lib/clientes";
 import {
   Badge,
   EmptyState,
@@ -15,10 +17,10 @@ import {
 } from "@/components/ui";
 import {
   formatDate,
-  formatMoney,
   labelEstado,
   machineName,
   machineThumbStyle,
+  mantenimientoTitulo,
 } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -33,36 +35,39 @@ export default async function MaquinaDetallePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-  const [maquina, clientes, catalogo] = await Promise.all([
-    prisma.maquina.findUnique({
+  const { id: idParam } = await params;
+  const id = Number(idParam);
+  if (!Number.isInteger(id)) notFound();
+
+  const [unidad, clientes, catalogo] = await Promise.all([
+    prismaPg.clienteMaquina.findUnique({
       where: { id },
       include: {
-        cliente: true,
-        catalogo: true,
-        mantenimientos: { orderBy: { fecha: "desc" } },
+        maquina: true,
+        mantenimientos: { orderBy: { solicitado: "desc" } },
       },
     }),
-    prisma.cliente.findMany({ orderBy: { nombre: "asc" } }),
-    prisma.catalogoMaquina.findMany({
-      orderBy: [{ marca: "asc" }, { nombre: "asc" }],
+    listClientes(),
+    prismaPg.maquina.findMany({
+      orderBy: [{ marca: "asc" }, { modelo: "asc" }],
     }),
   ]);
 
-  if (!maquina) notFound();
+  if (!unidad) notFound();
 
-  const update = updateMaquina.bind(null, maquina.id);
-  const remove = deleteMaquina.bind(null, maquina.id);
+  const cliente = await getCliente(unidad.idCliente);
+  const update = updateMaquina.bind(null, unidad.id);
+  const remove = deleteMaquina.bind(null, unidad.id);
 
   return (
     <div>
       <PageHeader
-        title={machineName(maquina)}
-        description={`Nro. serie ${maquina.numeroSerie} · Cliente: ${maquina.cliente.empresa || maquina.cliente.nombre}`}
+        title={machineName(unidad)}
+        description={`Nro. serie ${unidad.numeroSerie} · Cliente: ${clienteLabel(cliente)}`}
         action={
           <div className="flex flex-wrap gap-2">
             <SecondaryLink href="/maquinas">Volver</SecondaryLink>
-            <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${maquina.id}`}>
+            <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${unidad.id}`}>
               Nuevo trabajo
             </PrimaryLink>
           </div>
@@ -74,30 +79,21 @@ export default async function MaquinaDetallePage({
           <h3 className="brand-font mb-4 text-lg font-semibold text-white">
             Datos del equipo
           </h3>
-          {maquina.catalogo.imagen ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={maquina.catalogo.imagen}
-              alt={machineName(maquina)}
-              className="mb-4 machine-thumb object-cover"
-            />
-          ) : (
-            <div
-              className="mb-4 machine-thumb"
-              style={machineThumbStyle(maquina.catalogo.nombre)}
-            />
-          )}
-          <form action={update} className="grid gap-4">
+          <div
+            className="mb-4 machine-thumb"
+            style={machineThumbStyle(unidad.maquina.modelo ?? unidad.maquina.marca)}
+          />
+          <GuardedForm action={update} className="grid gap-4">
             <Field label="Modelo del catálogo *">
               <select
                 name="catalogoId"
                 required
-                defaultValue={maquina.catalogoId}
+                defaultValue={unidad.idMaquina}
                 className={inputClass}
               >
                 {catalogo.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.marca} {c.nombre}
+                  <option key={c.idmachine} value={c.idmachine}>
+                    {c.marca} {c.modelo}
                   </option>
                 ))}
               </select>
@@ -106,39 +102,28 @@ export default async function MaquinaDetallePage({
               <select
                 name="clienteId"
                 required
-                defaultValue={maquina.clienteId}
+                defaultValue={unidad.idCliente}
                 className={inputClass}
               >
                 {clientes.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.empresa || c.nombre}
+                    {clienteLabel(c)}
                   </option>
                 ))}
-              </select>
-            </Field>
-            <Field label="Estado del equipo">
-              <select
-                name="estadoEquipo"
-                defaultValue={maquina.estadoEquipo}
-                className={inputClass}
-              >
-                <option value="operativa">Operativa</option>
-                <option value="proximo">Próximo mantenimiento</option>
-                <option value="fuera">Fuera de servicio</option>
               </select>
             </Field>
             <Field label="Nro. de serie *">
               <input
                 name="numeroSerie"
                 required
-                defaultValue={maquina.numeroSerie}
+                defaultValue={unidad.numeroSerie}
                 className={inputClass}
               />
             </Field>
-            <Field label="Ubicación">
+            <Field label="Sitio / ubicación">
               <input
                 name="ubicacion"
-                defaultValue={maquina.ubicacion ?? ""}
+                defaultValue={unidad.sitio ?? ""}
                 className={inputClass}
               />
             </Field>
@@ -146,35 +131,26 @@ export default async function MaquinaDetallePage({
               <input
                 name="fechaCompra"
                 type="date"
-                defaultValue={toDateInput(maquina.fechaCompra)}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Descripción">
-              <textarea
-                name="descripcion"
-                rows={3}
-                defaultValue={maquina.descripcion ?? ""}
+                defaultValue={toDateInput(unidad.fechaCompra)}
                 className={inputClass}
               />
             </Field>
             <div className="flex flex-wrap gap-2">
-              <button type="submit" className="btn-primary">
-                Guardar cambios
-              </button>
-              <button formAction={remove} className="btn-ghost text-[var(--danger)]">
-                Eliminar equipo
-              </button>
+              <SubmitButton>Guardar cambios</SubmitButton>
+              <DangerButton formAction={remove}>Eliminar equipo</DangerButton>
             </div>
-          </form>
+          </GuardedForm>
           <p className="mt-4 text-sm text-[var(--ink-muted)]">
             Cliente:{" "}
             <Link
-              href={`/clientes/${maquina.clienteId}`}
+              href={`/clientes/${unidad.idCliente}`}
               className="text-[var(--accent)] hover:underline"
             >
-              {maquina.cliente.empresa || maquina.cliente.nombre}
+              {clienteLabel(cliente)}
             </Link>
+            <span className="mt-1 block font-mono text-xs">
+              ID máquina (integraciones): {unidad.idMaquina}
+            </span>
           </p>
         </Panel>
 
@@ -183,24 +159,24 @@ export default async function MaquinaDetallePage({
             <h3 className="brand-font text-lg font-semibold text-white">
               Expediente técnico
             </h3>
-            <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${maquina.id}`}>
+            <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${unidad.id}`}>
               Agregar
             </PrimaryLink>
           </div>
 
-          {maquina.mantenimientos.length === 0 ? (
+          {unidad.mantenimientos.length === 0 ? (
             <EmptyState
               title="Expediente vacío"
               description="Acá se listan calibraciones, preventivos y correctivos de este dimensionador."
               action={
-                <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${maquina.id}`}>
+                <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${unidad.id}`}>
                   Registrar primer trabajo
                 </PrimaryLink>
               }
             />
           ) : (
             <ol className="relative space-y-0 border-l border-[var(--line)] pl-5">
-              {maquina.mantenimientos.map((item) => (
+              {unidad.mantenimientos.map((item) => (
                 <li key={item.id} className="relative pb-6 last:pb-0">
                   <span className="absolute -left-[1.4rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -208,22 +184,20 @@ export default async function MaquinaDetallePage({
                       href={`/mantenimientos/${item.id}`}
                       className="font-medium text-[var(--accent)] hover:underline"
                     >
-                      {item.titulo}
+                      {mantenimientoTitulo(item)}
                     </Link>
                     <Badge tone={estadoTone(item.estado)}>
                       {labelEstado(item.estado)}
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                    {item.tipo} · {formatDate(item.fecha)}
-                    {item.tecnico ? ` · ${item.tecnico}` : ""}
-                    {item.costo != null ? ` · ${formatMoney(item.costo)}` : ""}
+                    {item.tipo} · Solicitado {formatDate(item.solicitado)}
+                    {item.arreglado
+                      ? ` · Arreglado ${formatDate(item.arreglado)}`
+                      : ""}
                   </p>
-                  <p className="mt-2 text-sm leading-relaxed">{item.descripcion}</p>
-                  {item.piezas ? (
-                    <p className="mt-2 text-xs text-[var(--ink-muted)]">
-                      Piezas / materiales: {item.piezas}
-                    </p>
+                  {item.descripcion ? (
+                    <p className="mt-2 text-sm leading-relaxed">{item.descripcion}</p>
                   ) : null}
                 </li>
               ))}

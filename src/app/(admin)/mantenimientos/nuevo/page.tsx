@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createMantenimiento } from "@/app/actions";
-import { prisma } from "@/lib/prisma";
+import { GuardedForm, SubmitButton } from "@/components/form";
+import { prismaPg } from "@/lib/prisma";
+import { getClientesMap, clienteLabel } from "@/lib/clientes";
 import {
   Field,
   PageHeader,
@@ -8,7 +10,12 @@ import {
   SecondaryLink,
   inputClass,
 } from "@/components/ui";
-import {ESTADOS_MANTENIMIENTO, TIPOS_MANTENIMIENTO, labelEstado, machineName } from "@/lib/utils";
+import {
+  ESTADOS_MANTENIMIENTO,
+  TIPOS_MANTENIMIENTO,
+  labelEstado,
+  machineName,
+} from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -18,29 +25,30 @@ export default async function NuevoMantenimientoPage({
   searchParams: Promise<{ maquinaId?: string }>;
 }) {
   const { maquinaId } = await searchParams;
-  const maquinas = await prisma.maquina.findMany({
-    orderBy: { marca: "asc" },
-    include: { cliente: true, catalogo: true },
+  const unidades = await prismaPg.clienteMaquina.findMany({
+    orderBy: { fechaCreacion: "desc" },
+    include: { maquina: true },
   });
+  const clientesMap = await getClientesMap(unidades.map((u) => u.idCliente));
 
   return (
     <div>
       <PageHeader
         title="Nuevo mantenimiento"
-        description="Registrá el trabajo en el expediente del dimensionador (calibración, service, correctivo)."
+        description="Registrá el trabajo en clientes_mantenimientos."
         action={<SecondaryLink href="/mantenimientos">Volver</SecondaryLink>}
       />
       <Panel className="max-w-2xl">
-        {maquinas.length === 0 ? (
+        {unidades.length === 0 ? (
           <p className="text-[var(--ink-muted)]">
             Primero necesitás{" "}
-            <Link href="/maquinas/nueva" className="text-[var(--accent)] underline">
-              registrar un equipo
+            <Link href="/maquinas/asignar" className="text-[var(--accent)] underline">
+              asignar un equipo a un cliente
             </Link>
             .
           </p>
         ) : (
-          <form action={createMantenimiento} className="grid gap-4 sm:grid-cols-2">
+          <GuardedForm action={createMantenimiento} className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Field label="Equipo *">
                 <select
@@ -52,9 +60,10 @@ export default async function NuevoMantenimientoPage({
                   <option value="" disabled>
                     Seleccionar...
                   </option>
-                  {maquinas.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {machineName(m)} ({m.numeroSerie}) — {m.cliente.nombre}
+                  {unidades.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {machineName(u)} ({u.numeroSerie}) —{" "}
+                      {clienteLabel(clientesMap.get(u.idCliente))}
                     </option>
                   ))}
                 </select>
@@ -70,7 +79,7 @@ export default async function NuevoMantenimientoPage({
               </select>
             </Field>
             <Field label="Estado">
-              <select name="estado" className={inputClass} defaultValue="completado">
+              <select name="estado" className={inputClass} defaultValue="abierto">
                 {ESTADOS_MANTENIMIENTO.map((estado) => (
                   <option key={estado} value={estado}>
                     {labelEstado(estado)}
@@ -79,54 +88,30 @@ export default async function NuevoMantenimientoPage({
               </select>
             </Field>
             <div className="sm:col-span-2">
-              <Field label="Título *">
-                <input
-                  name="titulo"
-                  required
-                  className={inputClass}
-                  placeholder="Ej: Calibración volumétrica trimestral"
-                />
-              </Field>
-            </div>
-            <div className="sm:col-span-2">
-              <Field label="Descripción del trabajo *">
+              <Field label="Descripción">
                 <textarea
                   name="descripcion"
-                  required
                   rows={5}
                   className={inputClass}
-                  placeholder="Detalle del expediente: sensores, calibración, firmware, integración WMS/balanza..."
+                  placeholder="Detalle del trabajo..."
                 />
               </Field>
             </div>
-            <Field label="Técnico">
-              <input name="tecnico" className={inputClass} />
-            </Field>
-            <Field label="Costo">
-              <input name="costo" type="number" step="0.01" min="0" className={inputClass} />
-            </Field>
-            <Field label="Fecha">
+            <Field label="Solicitado">
               <input
-                name="fecha"
+                name="solicitado"
                 type="date"
                 className={inputClass}
                 defaultValue={new Date().toISOString().slice(0, 10)}
               />
             </Field>
-            <Field label="Próximo mantenimiento">
-              <input name="proximo" type="date" className={inputClass} />
+            <Field label="Arreglado">
+              <input name="arreglado" type="date" className={inputClass} />
             </Field>
             <div className="sm:col-span-2">
-              <Field label="Piezas / materiales">
-                <textarea name="piezas" rows={2} className={inputClass} />
-              </Field>
+              <SubmitButton>Guardar en expediente</SubmitButton>
             </div>
-            <div className="sm:col-span-2">
-              <button type="submit" className="btn-primary">
-                Guardar en expediente
-              </button>
-            </div>
-          </form>
+          </GuardedForm>
         )}
       </Panel>
     </div>

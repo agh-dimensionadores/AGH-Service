@@ -154,8 +154,18 @@ export function Badge({
 }
 
 export function estadoTone(estado: string): "neutral" | "ok" | "warn" | "danger" {
-  if (estado === "completado" || estado === "operativa") return "ok";
-  if (estado === "en_curso" || estado === "proximo" || estado === "programado")
+  if (
+    estado === "completado" ||
+    estado === "cerrado" ||
+    estado === "operativa"
+  )
+    return "ok";
+  if (
+    estado === "en_curso" ||
+    estado === "abierto" ||
+    estado === "proximo" ||
+    estado === "programado"
+  )
     return "warn";
   if (estado === "cancelado" || estado === "fuera") return "danger";
   return "neutral";

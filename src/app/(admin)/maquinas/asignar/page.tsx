@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { asignarMaquina } from "@/app/actions";
-import { prisma } from "@/lib/prisma";
+import { GuardedForm, SubmitButton } from "@/components/form";
+import { prismaPg } from "@/lib/prisma";
+import { listClientes, clienteLabel } from "@/lib/clientes";
 import {
   Field,
   PageHeader,
@@ -9,7 +11,7 @@ import {
   SecondaryLink,
   inputClass,
 } from "@/components/ui";
-import { ESTADOS_EQUIPO, labelEstado, machineThumbStyle } from "@/lib/utils";
+import { machineThumbStyle } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -20,15 +22,17 @@ export default async function AsignarMaquinaPage({
 }) {
   const { clienteId, catalogoId } = await searchParams;
   const [clientes, catalogo] = await Promise.all([
-    prisma.cliente.findMany({ orderBy: { nombre: "asc" } }),
-    prisma.catalogoMaquina.findMany({ orderBy: [{ marca: "asc" }, { nombre: "asc" }] }),
+    listClientes(),
+    prismaPg.maquina.findMany({
+      orderBy: [{ marca: "asc" }, { modelo: "asc" }],
+    }),
   ]);
 
   return (
     <div>
       <PageHeader
         title="Asignar máquina"
-        description="Elegí un modelo del catálogo, el cliente, el nro. de serie y los datos de instalación."
+        description="Vinculá un modelo del catálogo a un cliente: nro. de serie, sitio y fecha de compra."
         action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
       />
       <Panel className="max-w-2xl">
@@ -49,7 +53,7 @@ export default async function AsignarMaquinaPage({
             .
           </p>
         ) : (
-          <form action={asignarMaquina} className="grid gap-4 sm:grid-cols-2">
+          <GuardedForm action={asignarMaquina} className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Field label="Máquina del catálogo *">
                 <select
@@ -62,8 +66,8 @@ export default async function AsignarMaquinaPage({
                     Seleccionar modelo...
                   </option>
                   {catalogo.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.marca} {item.nombre}
+                    <option key={item.idmachine} value={item.idmachine}>
+                      {item.marca} {item.modelo}
                     </option>
                   ))}
                 </select>
@@ -71,24 +75,15 @@ export default async function AsignarMaquinaPage({
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {catalogo.slice(0, 3).map((item) => (
                   <div
-                    key={item.id}
+                    key={item.idmachine}
                     className="overflow-hidden rounded-lg border border-[var(--line)]"
                   >
-                    {item.imagen ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.imagen}
-                        alt={item.nombre}
-                        className="h-20 w-full object-cover"
-                      />
-                    ) : (
-                      <div
-                        className="h-20 w-full"
-                        style={machineThumbStyle(item.nombre)}
-                      />
-                    )}
+                    <div
+                      className="h-20 w-full"
+                      style={machineThumbStyle(item.modelo ?? item.marca)}
+                    />
                     <p className="px-2 py-1 text-xs text-[var(--ink-muted)]">
-                      {item.marca} {item.nombre}
+                      {item.marca} {item.modelo}
                     </p>
                   </div>
                 ))}
@@ -107,16 +102,7 @@ export default async function AsignarMaquinaPage({
                 </option>
                 {clientes.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.empresa || c.nombre}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Estado del equipo">
-              <select name="estadoEquipo" className={inputClass} defaultValue="operativa">
-                {ESTADOS_EQUIPO.map((estado) => (
-                  <option key={estado} value={estado}>
-                    {labelEstado(estado)}
+                    {clienteLabel(c)}
                   </option>
                 ))}
               </select>
@@ -127,25 +113,18 @@ export default async function AsignarMaquinaPage({
             <Field label="Fecha de compra">
               <input name="fechaCompra" type="date" className={inputClass} />
             </Field>
-            <Field label="Ubicación">
+            <Field label="Sitio / ubicación">
               <input
                 name="ubicacion"
                 className={inputClass}
                 placeholder="Muelle, packing, CEDIS..."
               />
             </Field>
-            <div className="sm:col-span-2">
-              <Field label="Descripción / notas de instalación">
-                <textarea name="descripcion" rows={3} className={inputClass} />
-              </Field>
-            </div>
             <div className="sm:col-span-2 flex flex-wrap gap-2">
-              <button type="submit" className="btn-primary">
-                Asignar al cliente
-              </button>
+              <SubmitButton>Asignar al cliente</SubmitButton>
               <PrimaryLink href="/maquinas/nueva">Agregar otra al catálogo</PrimaryLink>
             </div>
-          </form>
+          </GuardedForm>
         )}
       </Panel>
     </div>

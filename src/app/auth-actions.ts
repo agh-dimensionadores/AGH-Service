@@ -8,7 +8,7 @@ import {
   createSessionToken,
   requireCliente,
 } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaPg } from "@/lib/prisma";
 
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") || "")
@@ -48,24 +48,27 @@ export async function createSoporteAction(formData: FormData) {
   const session = await requireCliente();
   const titulo = String(formData.get("titulo") || "").trim();
   const mensaje = String(formData.get("mensaje") || "").trim();
-  const maquinaIdRaw = String(formData.get("maquinaId") || "").trim();
-  const maquinaId = maquinaIdRaw || null;
+  const raw = String(formData.get("maquinaId") || "").trim();
+  const idClienteMaquina = raw ? Number(raw) : null;
 
   if (!titulo || !mensaje) {
     throw new Error("Título y mensaje son obligatorios");
   }
 
-  if (maquinaId) {
-    const maquina = await prisma.maquina.findFirst({
-      where: { id: maquinaId, clienteId: session.clienteId! },
+  if (idClienteMaquina != null && Number.isInteger(idClienteMaquina)) {
+    const unidad = await prismaPg.clienteMaquina.findFirst({
+      where: { id: idClienteMaquina, idCliente: session.clienteId! },
     });
-    if (!maquina) throw new Error("Máquina no válida");
+    if (!unidad) throw new Error("Máquina no válida");
   }
 
   await prisma.soporte.create({
     data: {
       clienteId: session.clienteId!,
-      maquinaId,
+      idClienteMaquina:
+        idClienteMaquina != null && Number.isInteger(idClienteMaquina)
+          ? idClienteMaquina
+          : null,
       titulo,
       mensaje,
       estado: "abierto",

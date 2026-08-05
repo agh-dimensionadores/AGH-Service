@@ -1,4 +1,5 @@
 import { createCliente } from "@/app/actions";
+import { GuardedForm, SubmitButton } from "@/components/form";
 import {
   Field,
   PageHeader,
@@ -12,39 +13,34 @@ export default function NuevoClientePage() {
     <div>
       <PageHeader
         title="Nuevo cliente"
-        description="Datos de la empresa u operación logística."
+        description="Se guarda en tu base PostgreSQL (tabla clientes)."
         action={<SecondaryLink href="/clientes">Volver</SecondaryLink>}
       />
       <Panel className="max-w-2xl">
-        <form action={createCliente} className="grid gap-4 sm:grid-cols-2">
+        <GuardedForm action={createCliente} className="grid gap-4 sm:grid-cols-2">
           <Field label="Nombre *">
-            <input name="nombre" required className={inputClass} />
+            <input name="nombre" required maxLength={100} className={inputClass} />
           </Field>
           <Field label="Empresa">
-            <input name="empresa" className={inputClass} />
+            <input name="empresa" maxLength={200} className={inputClass} />
           </Field>
           <Field label="Email">
-            <input name="email" type="email" className={inputClass} />
+            <input name="email" type="email" maxLength={200} className={inputClass} />
           </Field>
-          <Field label="Teléfono">
-            <input name="telefono" className={inputClass} />
+          <Field label="Activo">
+            <select name="activo" defaultValue="1" className={inputClass}>
+              <option value="1">Sí</option>
+              <option value="0">No</option>
+            </select>
           </Field>
-          <div className="sm:col-span-2">
-            <Field label="Dirección">
-              <input name="direccion" className={inputClass} />
-            </Field>
+          <div className="sm:col-span-2 text-sm text-[var(--ink-muted)]">
+            El <strong>token</strong> y el <strong>cliente_id</strong> se
+            generan automáticamente al guardar.
           </div>
           <div className="sm:col-span-2">
-            <Field label="Notas">
-              <textarea name="notas" rows={3} className={inputClass} />
-            </Field>
+            <SubmitButton>Guardar cliente</SubmitButton>
           </div>
-          <div className="sm:col-span-2">
-            <button type="submit" className="btn-primary">
-              Guardar cliente
-            </button>
-          </div>
-        </form>
+        </GuardedForm>
       </Panel>
     </div>
   );

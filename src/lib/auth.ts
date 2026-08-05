@@ -11,7 +11,7 @@ export type SessionUser = {
   email: string;
   nombre: string;
   rol: "admin" | "cliente";
-  clienteId: string | null;
+  clienteId: number | null;
 };
 
 function getSecret() {
@@ -55,13 +55,20 @@ export async function readSessionToken(
     ) {
       return null;
     }
+    const clienteId =
+      typeof payload.clienteId === "number"
+        ? payload.clienteId
+        : typeof payload.clienteId === "string" && payload.clienteId !== ""
+          ? Number(payload.clienteId)
+          : null;
+
     return {
       id: payload.id,
       email: payload.email,
       nombre: payload.nombre,
       rol: payload.rol,
       clienteId:
-        typeof payload.clienteId === "string" ? payload.clienteId : null,
+        clienteId != null && Number.isFinite(clienteId) ? clienteId : null,
     };
   } catch {
     return null;
@@ -85,7 +92,7 @@ export async function requireAdmin() {
 
 export async function requireCliente() {
   const session = await getSession();
-  if (!session || session.rol !== "cliente" || !session.clienteId) {
+  if (!session || session.rol !== "cliente" || session.clienteId == null) {
     redirect("/login");
   }
   return session;

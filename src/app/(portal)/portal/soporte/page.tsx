@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { requireCliente } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { prisma, prismaPg } from "@/lib/prisma";
 import { Badge, PageHeader, PrimaryLink } from "@/components/ui";
-import {formatDateTime, machineName } from "@/lib/utils";
+import { formatDateTime, machineName } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +25,23 @@ export default async function PortalSoportePage({
   const tickets = await prisma.soporte.findMany({
     where: { clienteId: session.clienteId! },
     orderBy: { creadoEn: "desc" },
-    include: { maquina: { include: { catalogo: true } } },
   });
+
+  const ids = [
+    ...new Set(
+      tickets
+        .map((t) => t.idClienteMaquina)
+        .filter((id): id is number => id != null)
+    ),
+  ];
+  const unidades =
+    ids.length > 0
+      ? await prismaPg.clienteMaquina.findMany({
+          where: { id: { in: ids } },
+          include: { maquina: true },
+        })
+      : [];
+  const unidadMap = new Map(unidades.map((u) => [u.id, u]));
 
   return (
     <div>
@@ -51,35 +66,38 @@ export default async function PortalSoportePage({
         </div>
       ) : (
         <div className="space-y-3">
-          {tickets.map((ticket) => (
-            <div key={ticket.id} className="card p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium text-white">{ticket.titulo}</p>
-                  <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                    {ticket.maquina
-                      ? `${machineName(ticket.maquina)}`
-                      : "Sin máquina específica"}{" "}
-                    · {formatDateTime(ticket.creadoEn)}
-                  </p>
+          {tickets.map((ticket) => {
+            const unidad = ticket.idClienteMaquina
+              ? unidadMap.get(ticket.idClienteMaquina)
+              : null;
+            return (
+              <div key={ticket.id} className="card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-white">{ticket.titulo}</p>
+                    <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                      {unidad ? machineName(unidad) : "Sin máquina específica"} ·{" "}
+                      {formatDateTime(ticket.creadoEn)}
+                    </p>
+                  </div>
+                  <Badge
+                    tone={
+                      ticket.estado === "cerrado"
+                        ? "ok"
+                        : ticket.estado === "en_curso"
+                          ? "warn"
+                          : "danger"
+                    }
+                  >
+                    {labelSoporte(ticket.estado)}
+                  </Badge>
                 </div>
-                <Badge
-                  tone={
-                    ticket.estado === "cerrado"
-                      ? "ok"
-                      : ticket.estado === "en_curso"
-                        ? "warn"
-                        : "danger"
-                  }
-                >
-                  {labelSoporte(ticket.estado)}
-                </Badge>
+                <p className="mt-3 text-sm leading-relaxed text-[#d8e0da]">
+                  {ticket.mensaje}
+                </p>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-[#d8e0da]">
-                {ticket.mensaje}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

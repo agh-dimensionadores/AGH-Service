@@ -80,66 +80,63 @@ export const TIPOS_MANTENIMIENTO = [
 ] as const;
 
 export const ESTADOS_MANTENIMIENTO = [
-  "programado",
+  "abierto",
   "en_curso",
-  "completado",
+  "cerrado",
   "cancelado",
-] as const;
-
-export const ESTADOS_EQUIPO = [
-  "operativa",
-  "proximo",
-  "fuera",
 ] as const;
 
 export function labelEstado(estado: string) {
   const map: Record<string, string> = {
-    programado: "Programado",
+    abierto: "Abierto",
     en_curso: "En curso",
-    completado: "Completado",
+    cerrado: "Cerrado",
     cancelado: "Cancelado",
-    operativa: "Operativa",
-    proximo: "Próximo mantenimiento",
-    fuera: "Fuera de servicio",
+    programado: "Programado",
+    completado: "Completado",
   };
   return map[estado] ?? estado;
 }
 
-export function machineName(maquina: {
-  catalogo?: { marca: string; nombre: string } | null;
-  marca?: string;
-  modelo?: string;
+export function machineName(m: {
+  marca?: string | null;
+  modelo?: string | null;
+  maquina?: { marca?: string | null; modelo?: string | null } | null;
 }) {
-  if (maquina.catalogo) {
-    return `${maquina.catalogo.marca} ${maquina.catalogo.nombre}`;
-  }
-  return [maquina.marca, maquina.modelo].filter(Boolean).join(" ") || "Equipo";
+  const marca = m.maquina?.marca ?? m.marca;
+  const modelo = m.maquina?.modelo ?? m.modelo;
+  return [marca, modelo].filter(Boolean).join(" ") || "Equipo";
 }
 
-export function machineImage(
-  maquina: {
-    catalogo?: { imagen?: string | null; nombre?: string } | null;
-    imagen?: string | null;
-    modelo?: string;
-  },
-  fallbackModelo?: string
-) {
-  return (
-    maquina.catalogo?.imagen ||
-    maquina.imagen ||
-    null
-  );
+export function mantenimientoTitulo(item: {
+  tipo: string;
+  descripcion?: string | null;
+}) {
+  if (!item.descripcion) return item.tipo;
+  const short = item.descripcion.trim().slice(0, 60);
+  return short.length < item.descripcion.trim().length
+    ? `${item.tipo}: ${short}…`
+    : `${item.tipo}: ${short}`;
+}
+
+/** Estado derivado de tickets abiertos (ya no hay estadoEquipo en PG) */
+export function equipoEstado(
+  mantenimientos: { estado: string }[]
+): "operativa" | "proximo" | "fuera" {
+  if (mantenimientos.some((m) => m.estado === "en_curso")) return "fuera";
+  if (mantenimientos.some((m) => m.estado === "abierto")) return "proximo";
+  return "operativa";
 }
 
 export function machineThumbStyle(modelo: string) {
-  const key = modelo.toUpperCase();
-  if (key.includes("PDC")) {
+  const key = (modelo || "").toUpperCase();
+  if (key.includes("PDC") || key.includes("PDL")) {
     return {
       background:
         "linear-gradient(145deg,#1a241c,#101610), radial-gradient(circle at 70% 20%, rgba(182,255,59,.22), transparent 45%)",
     };
   }
-  if (key.includes("LS") || key.includes("ODC")) {
+  if (key.includes("ODC") || key.includes("CLD")) {
     return {
       background:
         "linear-gradient(145deg,#182018,#0d120e), radial-gradient(circle at 30% 70%, rgba(0,180,255,.18), transparent 45%)",

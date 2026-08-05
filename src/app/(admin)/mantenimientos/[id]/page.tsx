@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteMantenimiento, updateMantenimiento } from "@/app/actions";
-import { prisma } from "@/lib/prisma";
+import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
+import { prismaPg } from "@/lib/prisma";
+import { getCliente, getClientesMap, clienteLabel } from "@/lib/clientes";
 import {
   Field,
   PageHeader,
@@ -9,9 +11,13 @@ import {
   SecondaryLink,
   inputClass,
 } from "@/components/ui";
-import {ESTADOS_MANTENIMIENTO,
+import {
+  ESTADOS_MANTENIMIENTO,
   TIPOS_MANTENIMIENTO,
-  labelEstado, machineName } from "@/lib/utils";
+  labelEstado,
+  machineName,
+  mantenimientoTitulo,
+} from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -25,21 +31,27 @@ export default async function MantenimientoDetallePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-  const [item, maquinas] = await Promise.all([
-    prisma.mantenimiento.findUnique({
+  const { id: idParam } = await params;
+  const id = Number(idParam);
+  if (!Number.isInteger(id)) notFound();
+
+  const [item, unidades] = await Promise.all([
+    prismaPg.clienteMantenimiento.findUnique({
       where: { id },
-      include: {
-        maquina: { include: { cliente: true, catalogo: true } },
-      },
+      include: { instalacion: { include: { maquina: true } } },
     }),
-    prisma.maquina.findMany({
-      orderBy: { marca: "asc" },
-      include: { cliente: true, catalogo: true },
+    prismaPg.clienteMaquina.findMany({
+      orderBy: { fechaCreacion: "desc" },
+      include: { maquina: true },
     }),
   ]);
 
   if (!item) notFound();
+
+  const [cliente, clientesMap] = await Promise.all([
+    getCliente(item.instalacion.idCliente),
+    getClientesMap(unidades.map((u) => u.idCliente)),
+  ]);
 
   const update = updateMantenimiento.bind(null, item.id);
   const remove = deleteMantenimiento.bind(null, item.id);
@@ -47,11 +59,11 @@ export default async function MantenimientoDetallePage({
   return (
     <div>
       <PageHeader
-        title={item.titulo}
-        description={`${item.tipo} · ${machineName(item.maquina)} · ${item.maquina.cliente.nombre}`}
+        title={mantenimientoTitulo(item)}
+        description={`${item.tipo} · ${machineName(item.instalacion)} · ${clienteLabel(cliente)}`}
         action={
           <div className="flex flex-wrap gap-2">
-            <SecondaryLink href={`/maquinas/${item.maquinaId}`}>
+            <SecondaryLink href={`/maquinas/${item.idClienteMaquina}`}>
               Ver expediente
             </SecondaryLink>
             <SecondaryLink href="/mantenimientos">Volver</SecondaryLink>
@@ -60,18 +72,19 @@ export default async function MantenimientoDetallePage({
       />
 
       <Panel className="max-w-2xl">
-        <form action={update} className="grid gap-4 sm:grid-cols-2">
+        <GuardedForm action={update} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Field label="Equipo *">
               <select
                 name="maquinaId"
                 required
-                defaultValue={item.maquinaId}
+                defaultValue={item.idClienteMaquina}
                 className={inputClass}
               >
-                {maquinas.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {machineName(m)} ({m.numeroSerie}) — {m.cliente.nombre}
+                {unidades.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {machineName(u)} ({u.numeroSerie}) —{" "}
+                    {clienteLabel(clientesMap.get(u.idCliente))}
                   </option>
                 ))}
               </select>
@@ -87,11 +100,7 @@ export default async function MantenimientoDetallePage({
             </select>
           </Field>
           <Field label="Estado">
-            <select
-              name="estado"
-              defaultValue={item.estado}
-              className={inputClass}
-            >
+            <select name="estado" defaultValue={item.estado} className={inputClass}>
               {ESTADOS_MANTENIMIENTO.map((estado) => (
                 <option key={estado} value={estado}>
                   {labelEstado(estado)}
@@ -100,88 +109,43 @@ export default async function MantenimientoDetallePage({
             </select>
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Título *">
-              <input
-                name="titulo"
-                required
-                defaultValue={item.titulo}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-          <div className="sm:col-span-2">
-            <Field label="Descripción del trabajo *">
+            <Field label="Descripción">
               <textarea
                 name="descripcion"
-                required
                 rows={5}
-                defaultValue={item.descripcion}
+                defaultValue={item.descripcion ?? ""}
                 className={inputClass}
               />
             </Field>
           </div>
-          <Field label="Técnico">
+          <Field label="Solicitado">
             <input
-              name="tecnico"
-              defaultValue={item.tecnico ?? ""}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Costo">
-            <input
-              name="costo"
-              type="number"
-              step="0.01"
-              min="0"
-              defaultValue={item.costo ?? ""}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Fecha">
-            <input
-              name="fecha"
+              name="solicitado"
               type="date"
-              defaultValue={toDateInput(item.fecha)}
+              defaultValue={toDateInput(item.solicitado)}
               className={inputClass}
             />
           </Field>
-          <Field label="Próximo mantenimiento">
+          <Field label="Arreglado">
             <input
-              name="proximo"
+              name="arreglado"
               type="date"
-              defaultValue={toDateInput(item.proximo)}
+              defaultValue={toDateInput(item.arreglado)}
               className={inputClass}
             />
           </Field>
-          <div className="sm:col-span-2">
-            <Field label="Piezas / materiales">
-              <textarea
-                name="piezas"
-                rows={2}
-                defaultValue={item.piezas ?? ""}
-                className={inputClass}
-              />
-            </Field>
-          </div>
           <div className="sm:col-span-2 flex flex-wrap gap-2">
-            <button type="submit" className="btn-primary">
-              Guardar cambios
-            </button>
-            <button
-              formAction={remove}
-              className="btn-ghost text-[var(--danger)]"
-            >
-              Eliminar trabajo
-            </button>
+            <SubmitButton>Guardar cambios</SubmitButton>
+            <DangerButton formAction={remove}>Eliminar trabajo</DangerButton>
           </div>
-        </form>
+        </GuardedForm>
         <p className="mt-4 text-sm text-[var(--ink-muted)]">
           Cliente:{" "}
           <Link
-            href={`/clientes/${item.maquina.clienteId}`}
+            href={`/clientes/${item.instalacion.idCliente}`}
             className="text-[var(--accent)] hover:underline"
           >
-            {item.maquina.cliente.nombre}
+            {clienteLabel(cliente)}
           </Link>
         </p>
       </Panel>

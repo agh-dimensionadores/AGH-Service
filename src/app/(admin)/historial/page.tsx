@@ -1,22 +1,31 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
+import { getClientesMap, clienteLabel } from "@/lib/clientes";
 import { Badge, PageHeader, estadoTone } from "@/components/ui";
-import {formatDateTime, labelEstado, machineName } from "@/lib/utils";
+import {
+  formatDateTime,
+  labelEstado,
+  machineName,
+  mantenimientoTitulo,
+} from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function HistorialPage() {
-  const actividad = await prisma.mantenimiento.findMany({
-    orderBy: { creadoEn: "desc" },
+  const actividad = await prismaPg.clienteMantenimiento.findMany({
+    orderBy: { solicitado: "desc" },
     take: 40,
-    include: { maquina: { include: { cliente: true, catalogo: true } } },
+    include: { instalacion: { include: { maquina: true } } },
   });
+  const clientesMap = await getClientesMap(
+    actividad.map((item) => item.instalacion.idCliente)
+  );
 
   return (
     <div>
       <PageHeader
         title="Historial"
-        description="Expediente cronológico de actividad sobre la flota."
+        description="Expediente cronológico desde clientes_mantenimientos."
       />
       <div className="card p-5">
         <ol className="relative space-y-0 border-l border-[var(--line)] pl-5">
@@ -28,16 +37,16 @@ export default async function HistorialPage() {
                   href={`/mantenimientos/${item.id}`}
                   className="font-medium text-white hover:text-[var(--accent)]"
                 >
-                  {item.titulo}
+                  {mantenimientoTitulo(item)}
                 </Link>
                 <Badge tone={estadoTone(item.estado)}>
                   {labelEstado(item.estado)}
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                {machineName(item.maquina)} ·{" "}
-                {item.maquina.cliente.empresa || item.maquina.cliente.nombre} ·{" "}
-                {formatDateTime(item.creadoEn)}
+                {machineName(item.instalacion)} ·{" "}
+                {clienteLabel(clientesMap.get(item.instalacion.idCliente))} ·{" "}
+                {formatDateTime(item.solicitado)}
               </p>
             </li>
           ))}

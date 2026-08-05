@@ -1,4 +1,5 @@
 import { loginAction } from "@/app/auth-actions";
+import { GuardedForm, SubmitButton } from "@/components/form";
 
 export default async function LoginPage({
   searchParams,
@@ -23,7 +24,7 @@ export default async function LoginPage({
         </div>
 
         <div className="card p-6">
-          <form action={loginAction} className="space-y-4">
+          <GuardedForm action={loginAction} className="space-y-4">
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-[#d8e0da]">Email</span>
               <input
@@ -54,10 +55,10 @@ export default async function LoginPage({
               </p>
             ) : null}
 
-            <button type="submit" className="btn-primary w-full">
+            <SubmitButton className="btn-primary w-full" pendingLabel="Ingresando…">
               Ingresar
-            </button>
-          </form>
+            </SubmitButton>
+          </GuardedForm>
 
           <div className="mt-5 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 text-xs text-[var(--ink-muted)]">
             <p className="font-medium text-[#d8e0da]">Cuentas de prueba</p>

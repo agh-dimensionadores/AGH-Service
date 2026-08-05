@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
+import { getClientesMap, clienteLabel } from "@/lib/clientes";
 import {
   Badge,
   EmptyState,
@@ -8,31 +9,38 @@ import {
   SecondaryLink,
   estadoTone,
 } from "@/components/ui";
-import { labelEstado, machineName, machineThumbStyle } from "@/lib/utils";
+import {
+  equipoEstado,
+  labelEstado,
+  machineName,
+  machineThumbStyle,
+} from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function MaquinasPage() {
-  const [catalogo, maquinas] = await Promise.all([
-    prisma.catalogoMaquina.findMany({
-      orderBy: [{ marca: "asc" }, { nombre: "asc" }],
-      include: { _count: { select: { maquinas: true } } },
+  const [catalogo, unidades] = await Promise.all([
+    prismaPg.maquina.findMany({
+      orderBy: [{ marca: "asc" }, { modelo: "asc" }],
+      include: { _count: { select: { instalaciones: true } } },
     }),
-    prisma.maquina.findMany({
-      orderBy: { creadoEn: "desc" },
+    prismaPg.clienteMaquina.findMany({
+      orderBy: { fechaCreacion: "desc" },
       include: {
-        cliente: true,
-        catalogo: true,
+        maquina: true,
+        mantenimientos: { select: { estado: true } },
         _count: { select: { mantenimientos: true } },
       },
     }),
   ]);
 
+  const clientesMap = await getClientesMap(unidades.map((u) => u.idCliente));
+
   return (
     <div>
       <PageHeader
         title="Máquinas"
-        description="Creá modelos en el catálogo y después asignalos a un cliente con nro. de serie."
+        description="Catálogo en PostgreSQL (tabla maquinas) y unidades asignadas (clientes_maquinas)."
         action={
           <div className="flex flex-wrap gap-2">
             <PrimaryLink href="/maquinas/nueva">Agregar máquina</PrimaryLink>
@@ -54,33 +62,24 @@ export default async function MaquinasPage() {
         {catalogo.length === 0 ? (
           <EmptyState
             title="Sin modelos en el catálogo"
-            description="Primero agregá una máquina con marca, nombre e imagen."
+            description="Primero agregá una máquina con marca y modelo."
             action={<PrimaryLink href="/maquinas/nueva">Agregar máquina</PrimaryLink>}
           />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {catalogo.map((item) => (
-              <div key={item.id} className="card overflow-hidden">
-                {item.imagen ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.imagen}
-                    alt={`${item.marca} ${item.nombre}`}
-                    className="machine-thumb rounded-none object-cover"
-                  />
-                ) : (
-                  <div
-                    className="machine-thumb rounded-none"
-                    style={machineThumbStyle(item.nombre)}
-                  />
-                )}
+              <div key={item.idmachine} className="card overflow-hidden">
+                <div
+                  className="machine-thumb rounded-none"
+                  style={machineThumbStyle(item.modelo ?? item.marca)}
+                />
                 <div className="p-3">
                   <p className="font-medium text-white">
-                    {item.marca} {item.nombre}
+                    {item.marca} {item.modelo}
                   </p>
                   <p className="text-xs text-[var(--ink-muted)]">
-                    {item._count.maquinas} asignada
-                    {item._count.maquinas === 1 ? "" : "s"}
+                    {item._count.instalaciones} asignada
+                    {item._count.instalaciones === 1 ? "" : "s"}
                   </p>
                 </div>
               </div>
@@ -97,10 +96,10 @@ export default async function MaquinasPage() {
           <SecondaryLink href="/maquinas/asignar">Asignar a cliente</SecondaryLink>
         </div>
 
-        {maquinas.length === 0 ? (
+        {unidades.length === 0 ? (
           <EmptyState
             title="Nadie tiene equipos asignados"
-            description="Elegí un modelo del catálogo y asignalo a un cliente con nro. de serie."
+            description="Elegí un modelo del catálogo y asignalo a un cliente con nro. de serie y sitio."
             action={<PrimaryLink href="/maquinas/asignar">Asignar</PrimaryLink>}
           />
         ) : (
@@ -116,38 +115,41 @@ export default async function MaquinasPage() {
                 </tr>
               </thead>
               <tbody>
-                {maquinas.map((maquina) => (
-                  <tr key={maquina.id}>
-                    <td>
-                      <Link
-                        href={`/maquinas/${maquina.id}`}
-                        className="font-medium text-[var(--accent)] hover:underline"
-                      >
-                        {machineName(maquina)}
-                      </Link>
-                      {maquina.ubicacion ? (
-                        <p className="text-[var(--ink-muted)]">{maquina.ubicacion}</p>
-                      ) : null}
-                    </td>
-                    <td className="font-mono text-xs text-[var(--ink-muted)]">
-                      {maquina.numeroSerie}
-                    </td>
-                    <td className="hidden md:table-cell">
-                      <Link
-                        href={`/clientes/${maquina.clienteId}`}
-                        className="hover:text-[var(--accent)]"
-                      >
-                        {maquina.cliente.empresa || maquina.cliente.nombre}
-                      </Link>
-                    </td>
-                    <td>
-                      <Badge tone={estadoTone(maquina.estadoEquipo)}>
-                        {labelEstado(maquina.estadoEquipo)}
-                      </Badge>
-                    </td>
-                    <td>{maquina._count.mantenimientos}</td>
-                  </tr>
-                ))}
+                {unidades.map((unidad) => {
+                  const estado = equipoEstado(unidad.mantenimientos);
+                  return (
+                    <tr key={unidad.id}>
+                      <td>
+                        <Link
+                          href={`/maquinas/${unidad.id}`}
+                          className="font-medium text-[var(--accent)] hover:underline"
+                        >
+                          {machineName(unidad)}
+                        </Link>
+                        {unidad.sitio ? (
+                          <p className="text-[var(--ink-muted)]">{unidad.sitio}</p>
+                        ) : null}
+                      </td>
+                      <td className="font-mono text-xs text-[var(--ink-muted)]">
+                        {unidad.numeroSerie}
+                      </td>
+                      <td className="hidden md:table-cell">
+                        <Link
+                          href={`/clientes/${unidad.idCliente}`}
+                          className="hover:text-[var(--accent)]"
+                        >
+                          {clienteLabel(clientesMap.get(unidad.idCliente))}
+                        </Link>
+                      </td>
+                      <td>
+                        <Badge tone={estadoTone(estado)}>
+                          {labelEstado(estado)}
+                        </Badge>
+                      </td>
+                      <td>{unidad._count.mantenimientos}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

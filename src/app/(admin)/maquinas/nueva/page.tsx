@@ -1,4 +1,5 @@
 import { createCatalogoMaquina } from "@/app/actions";
+import { GuardedForm, SubmitButton } from "@/components/form";
 import {
   Field,
   PageHeader,
@@ -12,40 +13,32 @@ export default function NuevaMaquinaPage() {
     <div>
       <PageHeader
         title="Agregar máquina"
-        description="Creá un modelo en el catálogo: marca, nombre e imagen. Después lo vas a poder asignar a clientes."
+        description="Creá un modelo en el catálogo PostgreSQL (tabla maquinas). Después lo asignás a clientes."
         action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
       />
       <Panel className="max-w-xl">
-        <form action={createCatalogoMaquina} className="grid gap-4">
+        <GuardedForm action={createCatalogoMaquina} className="grid gap-4">
           <Field label="Marca *">
             <input name="marca" required defaultValue="AGH" className={inputClass} />
           </Field>
-          <Field label="Nombre *">
+          <Field label="Modelo">
             <input
-              name="nombre"
-              required
+              name="modelo"
               className={inputClass}
-              placeholder="ODC, PDC, LS1000..."
+              placeholder="ODC, PDC, PDL, CLD-100..."
               list="modelos-agh"
             />
             <datalist id="modelos-agh">
               <option value="ODC" />
               <option value="PDC" />
-              <option value="LS1000" />
+              <option value="PDL" />
+              <option value="CLD-100" />
             </datalist>
           </Field>
-          <Field label="Imagen">
-            <input
-              name="imagen"
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              className={inputClass}
-            />
-          </Field>
-          <button type="submit" className="btn-primary w-fit">
+          <SubmitButton className="btn-primary w-fit">
             Guardar en catálogo
-          </button>
-        </form>
+          </SubmitButton>
+        </GuardedForm>
       </Panel>
     </div>
   );
