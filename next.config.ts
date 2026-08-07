@@ -3,6 +3,12 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client", "@prisma/client-sqlite", "@prisma/client-pg"],
+  // Fotos del catálogo llegan por Server Action
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "6mb",
+    },
+  },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,

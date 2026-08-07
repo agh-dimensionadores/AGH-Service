@@ -13,7 +13,7 @@ export default function NuevaMaquinaPage() {
     <div>
       <PageHeader
         title="Agregar máquina"
-        description="Creá un modelo en el catálogo PostgreSQL (tabla maquinas). Después lo asignás a clientes."
+        description="Creá un modelo en el catálogo PostgreSQL (tabla maquinas). La foto se guarda en la base (BYTEA)."
         action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
       />
       <Panel className="max-w-xl">
@@ -34,6 +34,17 @@ export default function NuevaMaquinaPage() {
               <option value="PDL" />
               <option value="CLD-100" />
             </datalist>
+          </Field>
+          <Field label="Imagen">
+            <input
+              name="imagen"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className={inputClass}
+            />
+            <p className="mt-1 text-xs text-[var(--ink-muted)]">
+              JPG, PNG, WEBP o GIF · máx. 5 MB · se guarda en PostgreSQL
+            </p>
           </Field>
           <SubmitButton className="btn-primary w-fit">
             Guardar en catálogo

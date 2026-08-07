@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prismaPg } from "@/lib/prisma";
+import { readUploadedImage } from "@/lib/uploads";
 
 function str(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -32,6 +33,11 @@ function optionalDate(formData: FormData, key: string) {
   const value = str(formData, key);
   if (!value) return null;
   return new Date(value);
+}
+
+function fileFrom(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return value instanceof File ? value : null;
 }
 
 function newClientToken() {
@@ -143,12 +149,69 @@ export async function createCatalogoMaquina(formData: FormData) {
   const modelo = optionalStr(formData, "modelo");
   if (!marca) throw new Error("La marca es obligatoria");
 
-  await prismaPg.maquina.create({
-    data: { marca, modelo },
-  });
+  const image = await readUploadedImage(fileFrom(formData, "imagen"));
+
+  if (image) {
+    // Raw SQL: Prisma a veces no reemplaza bien BYTEA en updates; en create también usamos lo mismo.
+    await prismaPg.$executeRaw`
+      INSERT INTO maquinas (marca, modelo, imagen, imagen_mime, imagen_updated_at)
+      VALUES (${marca}, ${modelo}, ${image.bytes}, ${image.mime}, NOW())
+    `;
+  } else {
+    await prismaPg.maquina.create({
+      data: { marca, modelo },
+    });
+  }
 
   touch("/maquinas");
   redirect("/maquinas");
+}
+
+export async function updateCatalogoMaquina(id: number, formData: FormData) {
+  const marca = str(formData, "marca");
+  const modelo = optionalStr(formData, "modelo");
+  if (!marca) throw new Error("La marca es obligatoria");
+
+  const existing = await prismaPg.maquina.findUnique({
+    where: { idmachine: id },
+    select: { idmachine: true },
+  });
+  if (!existing) throw new Error("El modelo no existe");
+
+  const image = await readUploadedImage(fileFrom(formData, "imagen"));
+  const quitarImagen = str(formData, "quitarImagen") === "1";
+
+  if (image) {
+    await prismaPg.$executeRaw`
+      UPDATE maquinas
+      SET
+        marca = ${marca},
+        modelo = ${modelo},
+        imagen = ${image.bytes},
+        imagen_mime = ${image.mime},
+        imagen_updated_at = NOW()
+      WHERE idmachine = ${id}
+    `;
+  } else if (quitarImagen) {
+    await prismaPg.$executeRaw`
+      UPDATE maquinas
+      SET
+        marca = ${marca},
+        modelo = ${modelo},
+        imagen = NULL,
+        imagen_mime = NULL,
+        imagen_updated_at = NOW()
+      WHERE idmachine = ${id}
+    `;
+  } else {
+    await prismaPg.maquina.update({
+      where: { idmachine: id },
+      data: { marca, modelo },
+    });
+  }
+
+  touch("/maquinas", `/maquinas/catalogo/${id}`);
+  redirect(`/maquinas/catalogo/${id}?ok=1`);
 }
 
 export async function deleteCatalogoMaquina(id: number) {

@@ -24,10 +24,14 @@ model Cliente {
 }
 
 model Maquina {
-  idmachine     Int              @id @default(autoincrement())
-  marca         String           @db.VarChar(100)
-  modelo        String?          @db.VarChar(100)
-  instalaciones ClienteMaquina[]
+  idmachine       Int              @id @default(autoincrement())
+  marca           String           @db.VarChar(100)
+  modelo          String?          @db.VarChar(100)
+  /// Foto del modelo (binario en PostgreSQL)
+  imagen          Bytes?
+  imagenMime      String?          @map("imagen_mime") @db.VarChar(50)
+  imagenUpdatedAt DateTime?        @map("imagen_updated_at") @db.Timestamptz(6)
+  instalaciones   ClienteMaquina[]
 
   @@map("maquinas")
 }

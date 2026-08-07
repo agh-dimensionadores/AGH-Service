@@ -3,6 +3,7 @@ import { asignarMaquina } from "@/app/actions";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { prismaPg } from "@/lib/prisma";
 import { listClientes, clienteLabel } from "@/lib/clientes";
+import { catalogImageUrl } from "@/lib/uploads";
 import {
   Field,
   PageHeader,
@@ -25,6 +26,13 @@ export default async function AsignarMaquinaPage({
     listClientes(),
     prismaPg.maquina.findMany({
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
+      select: {
+        idmachine: true,
+        marca: true,
+        modelo: true,
+        imagenMime: true,
+        imagenUpdatedAt: true,
+      },
     }),
   ]);
 
@@ -78,10 +86,19 @@ export default async function AsignarMaquinaPage({
                     key={item.idmachine}
                     className="overflow-hidden rounded-lg border border-[var(--line)]"
                   >
-                    <div
-                      className="h-20 w-full"
-                      style={machineThumbStyle(item.modelo ?? item.marca)}
-                    />
+                    {item.imagenMime ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={catalogImageUrl(item.idmachine, item.imagenUpdatedAt)}
+                        alt={`${item.marca} ${item.modelo ?? ""}`}
+                        className="h-20 w-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="h-20 w-full"
+                        style={machineThumbStyle(item.modelo ?? item.marca)}
+                      />
+                    )}
                     <p className="px-2 py-1 text-xs text-[var(--ink-muted)]">
                       {item.marca} {item.modelo}
                     </p>

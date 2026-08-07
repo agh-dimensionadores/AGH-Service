@@ -4,6 +4,7 @@ import { deleteMaquina, updateMaquina } from "@/app/actions";
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
 import { prismaPg } from "@/lib/prisma";
 import { listClientes, getCliente, clienteLabel } from "@/lib/clientes";
+import { catalogImageUrl } from "@/lib/uploads";
 import {
   Badge,
   EmptyState,
@@ -43,13 +44,26 @@ export default async function MaquinaDetallePage({
     prismaPg.clienteMaquina.findUnique({
       where: { id },
       include: {
-        maquina: true,
+        maquina: {
+          select: {
+            idmachine: true,
+            marca: true,
+            modelo: true,
+            imagenMime: true,
+            imagenUpdatedAt: true,
+          },
+        },
         mantenimientos: { orderBy: { solicitado: "desc" } },
       },
     }),
     listClientes(),
     prismaPg.maquina.findMany({
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
+      select: {
+        idmachine: true,
+        marca: true,
+        modelo: true,
+      },
     }),
   ]);
 
@@ -79,10 +93,24 @@ export default async function MaquinaDetallePage({
           <h3 className="brand-font mb-4 text-lg font-semibold text-white">
             Datos del equipo
           </h3>
-          <div
-            className="mb-4 machine-thumb"
-            style={machineThumbStyle(unidad.maquina.modelo ?? unidad.maquina.marca)}
-          />
+          {unidad.maquina.imagenMime ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={catalogImageUrl(
+                unidad.maquina.idmachine,
+                unidad.maquina.imagenUpdatedAt
+              )}
+              alt={machineName(unidad)}
+              className="mb-4 machine-thumb object-cover"
+            />
+          ) : (
+            <div
+              className="mb-4 machine-thumb"
+              style={machineThumbStyle(
+                unidad.maquina.modelo ?? unidad.maquina.marca
+              )}
+            />
+          )}
           <GuardedForm action={update} className="grid gap-4">
             <Field label="Modelo del catálogo *">
               <select

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prismaPg } from "@/lib/prisma";
 import { getClientesMap, clienteLabel } from "@/lib/clientes";
+import { catalogImageUrl } from "@/lib/uploads";
 import {
   Badge,
   EmptyState,
@@ -22,12 +23,27 @@ export default async function MaquinasPage() {
   const [catalogo, unidades] = await Promise.all([
     prismaPg.maquina.findMany({
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
-      include: { _count: { select: { instalaciones: true } } },
+      select: {
+        idmachine: true,
+        marca: true,
+        modelo: true,
+        imagenMime: true,
+        imagenUpdatedAt: true,
+        _count: { select: { instalaciones: true } },
+      },
     }),
     prismaPg.clienteMaquina.findMany({
       orderBy: { fechaCreacion: "desc" },
       include: {
-        maquina: true,
+        maquina: {
+          select: {
+            idmachine: true,
+            marca: true,
+            modelo: true,
+            imagenMime: true,
+            imagenUpdatedAt: true,
+          },
+        },
         mantenimientos: { select: { estado: true } },
         _count: { select: { mantenimientos: true } },
       },
@@ -68,11 +84,24 @@ export default async function MaquinasPage() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {catalogo.map((item) => (
-              <div key={item.idmachine} className="card overflow-hidden">
-                <div
-                  className="machine-thumb rounded-none"
-                  style={machineThumbStyle(item.modelo ?? item.marca)}
-                />
+              <Link
+                key={item.idmachine}
+                href={`/maquinas/catalogo/${item.idmachine}`}
+                className="card overflow-hidden transition hover:border-[rgba(182,255,59,0.35)]"
+              >
+                {item.imagenMime ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={catalogImageUrl(item.idmachine, item.imagenUpdatedAt)}
+                    alt={`${item.marca} ${item.modelo ?? ""}`}
+                    className="machine-thumb rounded-none object-cover"
+                  />
+                ) : (
+                  <div
+                    className="machine-thumb rounded-none"
+                    style={machineThumbStyle(item.modelo ?? item.marca)}
+                  />
+                )}
                 <div className="p-3">
                   <p className="font-medium text-white">
                     {item.marca} {item.modelo}
@@ -80,9 +109,13 @@ export default async function MaquinasPage() {
                   <p className="text-xs text-[var(--ink-muted)]">
                     {item._count.instalaciones} asignada
                     {item._count.instalaciones === 1 ? "" : "s"}
+                    {!item.imagenMime ? " · sin foto" : ""}
+                  </p>
+                  <p className="mt-2 text-xs text-[var(--accent)]">
+                    Editar / agregar foto
                   </p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
