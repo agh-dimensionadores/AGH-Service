@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
+  createAghUsuario,
   createCloudUser,
   deleteCliente,
+  resetAghUsuarioPassword,
   updateCliente,
 } from "@/app/actions";
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
-import { prismaPg } from "@/lib/prisma";
+import { prisma, prismaPg } from "@/lib/prisma";
 import { getCliente } from "@/lib/clientes";
 import {
   Badge,
@@ -33,17 +35,17 @@ export default async function ClienteDetallePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ cloudUser?: string }>;
+  searchParams: Promise<{ cloudUser?: string; aghUser?: string }>;
 }) {
   const { id: idParam } = await params;
-  const { cloudUser } = await searchParams;
+  const { cloudUser, aghUser } = await searchParams;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
   const cliente = await getCliente(id);
   if (!cliente) notFound();
 
-  const [unidades, cloudUsers] = await Promise.all([
+  const [unidades, cloudUsers, aghUsuario] = await Promise.all([
     prismaPg.clienteMaquina.findMany({
       where: { idCliente: id },
       orderBy: { fechaCreacion: "desc" },
@@ -60,11 +62,17 @@ export default async function ClienteDetallePage({
       where: { clienteId: id },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.usuario.findFirst({
+      where: { clienteId: id, rol: "cliente" },
+      select: { id: true, email: true, nombre: true, creadoEn: true },
+    }),
   ]);
 
   const update = updateCliente.bind(null, cliente.id);
   const remove = deleteCliente.bind(null, cliente.id);
   const createVoxelUser = createCloudUser.bind(null, cliente.id);
+  const createAghUser = createAghUsuario.bind(null, cliente.id);
+  const resetAghPassword = resetAghUsuarioPassword.bind(null, cliente.id);
 
   return (
     <div>
@@ -223,13 +231,107 @@ export default async function ClienteDetallePage({
           </Panel>
 
           <Panel>
+            <div className="mb-4">
+              <h3 className="brand-font text-lg font-semibold text-white">
+                Acceso a AGH Service
+              </h3>
+              <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                Un solo usuario por cliente para entrar al portal (máquinas,
+                historial y solicitar arreglos).
+              </p>
+            </div>
+
+            {aghUser === "created" ? (
+              <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+                Usuario de AGH Service creado. Ya puede ingresar en /login.
+              </p>
+            ) : null}
+            {aghUser === "password" ? (
+              <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+                Contraseña actualizada.
+              </p>
+            ) : null}
+
+            {aghUsuario ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-[var(--line)] p-3">
+                  <p className="font-medium text-white">{aghUsuario.email}</p>
+                  <p className="text-xs text-[var(--ink-muted)]">
+                    {aghUsuario.nombre} · Creado{" "}
+                    {formatDate(aghUsuario.creadoEn)}
+                  </p>
+                </div>
+                <h4 className="font-medium text-white">Resetear contraseña</h4>
+                <GuardedForm
+                  action={resetAghPassword}
+                  className="grid gap-4 sm:grid-cols-2"
+                >
+                  <Field label="Nueva contraseña *">
+                    <input
+                      name="password"
+                      type="password"
+                      required
+                      minLength={6}
+                      maxLength={100}
+                      autoComplete="new-password"
+                      className={inputClass}
+                    />
+                  </Field>
+                  <div className="flex items-end">
+                    <SubmitButton>Guardar contraseña</SubmitButton>
+                  </div>
+                </GuardedForm>
+              </div>
+            ) : (
+              <GuardedForm
+                action={createAghUser}
+                className="grid gap-4 sm:grid-cols-2"
+              >
+                <Field label="Email de acceso *">
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    maxLength={200}
+                    defaultValue={cliente.email ?? ""}
+                    autoComplete="off"
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Nombre">
+                  <input
+                    name="nombre"
+                    maxLength={100}
+                    defaultValue={cliente.nombre}
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Contraseña *">
+                  <input
+                    name="password"
+                    type="password"
+                    required
+                    minLength={6}
+                    maxLength={100}
+                    autoComplete="new-password"
+                    className={inputClass}
+                  />
+                </Field>
+                <div className="flex items-end">
+                  <SubmitButton>Crear acceso AGH Service</SubmitButton>
+                </div>
+              </GuardedForm>
+            )}
+          </Panel>
+
+          <Panel>
             <div className="mb-4 flex items-center justify-between gap-2">
               <div>
                 <h3 className="brand-font text-lg font-semibold text-white">
                   Usuarios de Voxel Cloud
                 </h3>
                 <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                  Accesos asociados a este cliente en cloud_users.
+                  Accesos asociados a este cliente en cloud_users (otra app).
                 </p>
               </div>
               <Badge>{cloudUsers.length}</Badge>
@@ -270,7 +372,7 @@ export default async function ClienteDetallePage({
               </p>
             )}
 
-            <h4 className="mb-3 font-medium text-white">Crear usuario</h4>
+            <h4 className="mb-3 font-medium text-white">Crear usuario Cloud</h4>
             <GuardedForm
               action={createVoxelUser}
               className="grid gap-4 sm:grid-cols-2"

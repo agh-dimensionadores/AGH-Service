@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, Space_Grotesk } from "next/font/google";
+import { NavigationProgress } from "@/components/navigation-progress";
 import "./globals.css";
 
 const display = Space_Grotesk({
@@ -35,6 +36,7 @@ export default function RootLayout({
           } as React.CSSProperties
         }
       >
+        <NavigationProgress />
         {children}
       </body>
     </html>

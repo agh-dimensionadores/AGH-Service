@@ -112,7 +112,7 @@ export default async function MaquinasPage() {
                     {!item.imagenMime ? " · sin foto" : ""}
                   </p>
                   <p className="mt-2 text-xs text-[var(--accent)]">
-                    Editar / agregar foto
+                    Editar
                   </p>
                 </div>
               </Link>

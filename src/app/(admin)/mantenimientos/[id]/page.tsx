@@ -23,7 +23,22 @@ export const dynamic = "force-dynamic";
 
 function toDateInput(value?: Date | null) {
   if (!value) return "";
-  return value.toISOString().slice(0, 10);
+  const d = value;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function toDateTimeLocal(value?: Date | null) {
+  if (!value) return "";
+  const d = value;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day}T${h}:${min}`;
 }
 
 export default async function MantenimientoDetallePage({
@@ -131,6 +146,24 @@ export default async function MantenimientoDetallePage({
               name="arreglado"
               type="date"
               defaultValue={toDateInput(item.arreglado)}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Programado (agenda)">
+            <input
+              name="programado"
+              type="datetime-local"
+              defaultValue={toDateTimeLocal(item.programado)}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Quién va">
+            <input
+              name="asignadoA"
+              type="text"
+              maxLength={150}
+              defaultValue={item.asignadoA ?? ""}
+              placeholder="Nombre o equipo"
               className={inputClass}
             />
           </Field>

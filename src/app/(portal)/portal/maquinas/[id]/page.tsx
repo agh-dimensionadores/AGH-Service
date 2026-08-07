@@ -49,8 +49,8 @@ export default async function PortalMaquinaPage({
         action={
           <div className="flex flex-wrap gap-2">
             <SecondaryLink href="/portal">Volver</SecondaryLink>
-            <PrimaryLink href={`/portal/soporte/nuevo?maquinaId=${unidad.id}`}>
-              Solicitar soporte
+            <PrimaryLink href={`/portal/solicitar?maquinaId=${unidad.id}`}>
+              Solicitar arreglo
             </PrimaryLink>
           </div>
         }

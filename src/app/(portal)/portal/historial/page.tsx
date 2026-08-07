@@ -16,8 +16,13 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function PortalHistorialPage() {
+export default async function PortalHistorialPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ok?: string }>;
+}) {
   const session = await requireCliente();
+  const { ok } = await searchParams;
   const items = await prismaPg.clienteMantenimiento.findMany({
     where: { instalacion: { idCliente: session.clienteId! } },
     orderBy: { solicitado: "desc" },
@@ -27,14 +32,24 @@ export default async function PortalHistorialPage() {
   return (
     <div>
       <PageHeader
-        title="Historial de reparaciones"
-        description="Todos los trabajos realizados sobre tus equipos."
-        action={<PrimaryLink href="/portal/soporte/nuevo">Solicitar soporte</PrimaryLink>}
+        title="Historial de arreglos"
+        description="Solicitudes y trabajos sobre tus equipos."
+        action={<PrimaryLink href="/portal/solicitar">Solicitar arreglo</PrimaryLink>}
       />
+
+      {ok ? (
+        <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+          Solicitud enviada. El equipo de AGH la va a revisar.
+        </p>
+      ) : null}
 
       {items.length === 0 ? (
         <div className="card p-6 text-[var(--ink-muted)]">
-          Todavía no hay historial disponible.
+          Todavía no hay historial.{" "}
+          <Link href="/portal/solicitar" className="text-[var(--accent)] underline">
+            Pedí el primer arreglo
+          </Link>
+          .
         </div>
       ) : (
         <div className="table-wrap">

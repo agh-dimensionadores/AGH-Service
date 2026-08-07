@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prismaPg } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getClientesMap, clienteLabel } from "@/lib/clientes";
+import { catalogImageUrl } from "@/lib/uploads";
 import { DonutChart } from "@/components/donut";
 import {
   IconAlert,
@@ -27,6 +28,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const maquinaSelect = {
+  idmachine: true,
+  marca: true,
+  modelo: true,
+  imagenMime: true,
+  imagenUpdatedAt: true,
+} as const;
+
 export default async function DashboardPage() {
   const session = await getSession();
   const nombre = session?.nombre?.split(" ")[0] || "Micaela";
@@ -35,7 +44,7 @@ export default async function DashboardPage() {
     await Promise.all([
       prismaPg.clienteMaquina.findMany({
         include: {
-          maquina: true,
+          maquina: { select: maquinaSelect },
           mantenimientos: { select: { estado: true } },
         },
       }),
@@ -49,20 +58,24 @@ export default async function DashboardPage() {
         where: { estado: { in: ["abierto", "en_curso"] } },
         orderBy: { solicitado: "asc" },
         take: 5,
-        include: { instalacion: { include: { maquina: true } } },
+        include: {
+          instalacion: { include: { maquina: { select: maquinaSelect } } },
+        },
       }),
       prismaPg.clienteMaquina.findMany({
         take: 4,
         orderBy: { fechaCreacion: "desc" },
         include: {
-          maquina: true,
+          maquina: { select: maquinaSelect },
           mantenimientos: { select: { estado: true } },
         },
       }),
       prismaPg.clienteMantenimiento.findMany({
         take: 5,
         orderBy: { solicitado: "desc" },
-        include: { instalacion: { include: { maquina: true } } },
+        include: {
+          instalacion: { include: { maquina: { select: maquinaSelect } } },
+        },
       }),
     ]);
 
@@ -108,11 +121,26 @@ export default async function DashboardPage() {
     },
   ];
 
+  const notifications = proximos.map((item) => ({
+    id: String(item.id),
+    title: `${machineName(item.instalacion)} · ${labelEstado(item.estado)}`,
+    subtitle: [
+      clienteLabel(clientesMap.get(item.instalacion.idCliente)),
+      item.tipo,
+      item.instalacion.sitio || null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    href: `/maquinas/${item.idClienteMaquina}`,
+    when: formatDateTime(item.solicitado),
+  }));
+
   return (
     <div>
       <TopBar
         title={`Bienvenida, ${nombre}`}
         subtitle="Estado general desde PostgreSQL"
+        notifications={notifications}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -162,13 +190,25 @@ export default async function DashboardPage() {
                       href={`/maquinas/${item.idClienteMaquina}`}
                       className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 transition hover:border-[rgba(182,255,59,0.35)]"
                     >
-                      <div
-                        className="h-12 w-14 shrink-0 rounded-lg"
-                        style={machineThumbStyle(
-                          item.instalacion.maquina.modelo ??
-                            item.instalacion.maquina.marca
-                        )}
-                      />
+                      {item.instalacion.maquina.imagenMime ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={catalogImageUrl(
+                            item.instalacion.maquina.idmachine,
+                            item.instalacion.maquina.imagenUpdatedAt
+                          )}
+                          alt={machineName(item.instalacion)}
+                          className="h-12 w-14 shrink-0 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="h-12 w-14 shrink-0 rounded-lg"
+                          style={machineThumbStyle(
+                            item.instalacion.maquina.modelo ??
+                              item.instalacion.maquina.marca
+                          )}
+                        />
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-white">
                           {machineName(item.instalacion)}
@@ -270,12 +310,24 @@ export default async function DashboardPage() {
                   href={`/maquinas/${unidad.id}`}
                   className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 transition hover:border-[rgba(182,255,59,0.35)]"
                 >
-                  <div
-                    className="machine-thumb mb-3"
-                    style={machineThumbStyle(
-                      unidad.maquina.modelo ?? unidad.maquina.marca
-                    )}
-                  />
+                  {unidad.maquina.imagenMime ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={catalogImageUrl(
+                        unidad.maquina.idmachine,
+                        unidad.maquina.imagenUpdatedAt
+                      )}
+                      alt={machineName(unidad)}
+                      className="machine-thumb mb-3 object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="machine-thumb mb-3"
+                      style={machineThumbStyle(
+                        unidad.maquina.modelo ?? unidad.maquina.marca
+                      )}
+                    />
+                  )}
                   <p className="font-medium text-white">{machineName(unidad)}</p>
                   <p className="truncate text-xs text-[var(--ink-muted)]">
                     {clienteLabel(clientesMap.get(unidad.idCliente))}

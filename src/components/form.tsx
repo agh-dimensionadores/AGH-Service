@@ -41,7 +41,7 @@ function FormPendingHint() {
   if (!pending) return null;
   return (
     <p className="mt-3 text-sm text-[var(--accent)]" role="status">
-      Guardando… la base remota puede tardar unos segundos.
+      Cargando…
     </p>
   );
 }

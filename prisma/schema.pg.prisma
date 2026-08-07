@@ -59,6 +59,10 @@ model ClienteMantenimiento {
   solicitado        DateTime       @default(now())
   arreglado         DateTime?
   estado            String         @default("abierto") @db.VarChar(30)
+  /// Día/hora planificados para la visita (agenda admin)
+  programado        DateTime?      @db.Timestamptz(6)
+  /// Quién va (texto libre)
+  asignadoA         String?        @map("asignado_a") @db.VarChar(150)
   instalacion       ClienteMaquina @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
 
   @@map("clientes_mantenimientos")

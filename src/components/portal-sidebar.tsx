@@ -12,7 +12,7 @@ import {
 const nav = [
   { href: "/portal", label: "Mis máquinas", icon: IconMachine },
   { href: "/portal/historial", label: "Historial", icon: IconHistory },
-  { href: "/portal/soporte", label: "Soporte técnico", icon: IconWrench },
+  { href: "/portal/solicitar", label: "Solicitar arreglo", icon: IconWrench },
 ];
 
 export function PortalSidebar({ nombre }: { nombre: string }) {

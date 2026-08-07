@@ -94,6 +94,9 @@ export function labelEstado(estado: string) {
     cancelado: "Cancelado",
     programado: "Programado",
     completado: "Completado",
+    operativa: "Operativa",
+    proximo: "Pendiente",
+    fuera: "En reparación",
   };
   return map[estado] ?? estado;
 }

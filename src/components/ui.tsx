@@ -1,12 +1,18 @@
 import Link from "next/link";
-import { IconBell, IconSearch } from "@/components/icons";
+import { IconSearch } from "@/components/icons";
+import {
+  NotificationsBell,
+  type NotificationItem,
+} from "@/components/notifications";
 
 export function TopBar({
   title,
   subtitle,
+  notifications = [],
 }: {
   title: string;
   subtitle?: string;
+  notifications?: NotificationItem[];
 }) {
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -19,14 +25,7 @@ export function TopBar({
         ) : null}
       </div>
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          className="relative grid h-10 w-10 place-items-center rounded-full border border-[var(--line)] text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-          aria-label="Notificaciones"
-        >
-          <IconBell className="h-5 w-5" />
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent-glow)]" />
-        </button>
+        <NotificationsBell items={notifications} />
         <div className="relative hidden sm:block">
           <IconSearch className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--ink-muted)]" />
           <input className="search-input" placeholder="Buscar..." />
