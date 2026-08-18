@@ -176,8 +176,13 @@ export default async function MaquinaDetallePage({
             >
               {clienteLabel(cliente)}
             </Link>
-            <span className="mt-1 block font-mono text-xs">
-              ID máquina (integraciones): {unidad.idMaquina}
+            <span className="mt-2 flex flex-wrap gap-2">
+              <span className="rounded-md border border-[var(--accent)] bg-[rgba(182,255,59,0.1)] px-2 py-1 font-mono text-xs text-[var(--accent)]">
+                Voxel Cam · clientes_maquinas.id = {unidad.id}
+              </span>
+              <span className="rounded-md border border-[var(--line)] px-2 py-1 font-mono text-xs text-[var(--ink-muted)]">
+                Catálogo · id_maquina = {unidad.idMaquina}
+              </span>
             </span>
           </p>
         </Panel>

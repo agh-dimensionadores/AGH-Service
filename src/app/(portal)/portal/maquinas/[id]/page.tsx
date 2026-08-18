@@ -77,6 +77,10 @@ export default async function PortalMaquinaPage({
               <dd className="text-white">{unidad.maquina.modelo || "—"}</dd>
             </div>
             <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
+              <dt className="text-[var(--ink-muted)]">ID Voxel Cam</dt>
+              <dd className="font-mono text-[var(--accent)]">{unidad.id}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Nro. de serie</dt>
               <dd className="font-mono text-white">{unidad.numeroSerie}</dd>
             </div>

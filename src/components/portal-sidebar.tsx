@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logoutAction } from "@/app/auth-actions";
+import { BrandLogo } from "@/components/brand-logo";
 import {
   IconHistory,
   IconMachine,
@@ -26,20 +27,8 @@ export function PortalSidebar({ nombre }: { nombre: string }) {
 
   return (
     <aside className="sidebar">
-      <div className="px-5 pb-4 pt-6">
-        <Link href="/portal" className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--accent-dim)] text-lg font-bold text-[var(--accent)] shadow-[0_0_20px_var(--accent-glow)]">
-            A
-          </span>
-          <span>
-            <span className="brand-font block text-lg font-semibold tracking-tight text-white">
-              AGH <span className="text-[var(--accent)]">PORTAL</span>
-            </span>
-            <span className="text-[0.65rem] tracking-[0.16em] text-[#a8b5ab] uppercase">
-              Área cliente
-            </span>
-          </span>
-        </Link>
+      <div className="sidebar-brand">
+        <BrandLogo href="/portal" subtitle="Área cliente" />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">

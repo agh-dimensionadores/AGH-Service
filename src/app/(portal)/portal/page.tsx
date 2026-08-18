@@ -134,7 +134,7 @@ export default async function PortalHomePage() {
                         {machineName(unidad)}
                       </p>
                       <p className="font-mono text-xs text-[var(--ink-muted)]">
-                        {unidad.numeroSerie}
+                        ID {unidad.id} · {unidad.numeroSerie}
                       </p>
                     </div>
                     <Badge tone={estadoTone(estado)}>

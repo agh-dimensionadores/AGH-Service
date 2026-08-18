@@ -86,6 +86,46 @@ h3,
   height: 100vh;
 }
 
+.brand-logo {
+  transition: opacity 0.15s ease;
+}
+
+.brand-logo:hover {
+  opacity: 0.92;
+}
+
+.brand-logo-img {
+  display: block;
+  height: auto;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.sidebar-brand {
+  padding: 1.25rem 1.25rem 1.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar-brand-img {
+  height: 3.75rem;
+  width: auto;
+  max-width: 100%;
+}
+
+.sidebar-brand-sub {
+  display: block;
+  margin-top: 1.65rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: #a8b5ab;
+  text-transform: uppercase;
+}
+
+.sidebar-brand-link {
+  padding-bottom: 0.15rem;
+}
+
 .nav-link {
   display: flex;
   align-items: center;

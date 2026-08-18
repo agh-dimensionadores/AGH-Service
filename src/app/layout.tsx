@@ -16,7 +16,7 @@ const body = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "AGH CENTRAL — Servicio técnico",
+  title: "AGH Dimensionadores — Servicio técnico",
   description:
     "Panel de mantenimiento de equipos de dimensionado 3D y pesaje para logística",
 };

@@ -199,14 +199,18 @@ export default async function ClienteDetallePage({
                         >
                           {machineName(unidad)}
                         </Link>
-                        <p className="text-sm text-[var(--ink-muted)]">
-                          ID máquina:{" "}
-                          <span className="font-mono text-white">
-                            {unidad.idMaquina}
-                          </span>
-                          {" · "}Nro. serie: {unidad.numeroSerie}
+                        <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                          Nro. serie: {unidad.numeroSerie}
                           {unidad.sitio ? ` · ${unidad.sitio}` : ""}
                         </p>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-md border border-[var(--accent)] bg-[rgba(182,255,59,0.1)] px-2 py-1 font-mono text-[var(--accent)]">
+                            Voxel Cam · clientes_maquinas.id = {unidad.id}
+                          </span>
+                          <span className="rounded-md border border-[var(--line)] px-2 py-1 font-mono text-[var(--ink-muted)]">
+                            Catálogo · id_maquina = {unidad.idMaquina}
+                          </span>
+                        </div>
                       </div>
                       <Badge>
                         {unidad._count.mantenimientos} trabajo

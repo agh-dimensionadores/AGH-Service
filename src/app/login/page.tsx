@@ -1,4 +1,5 @@
 import { loginAction } from "@/app/auth-actions";
+import { BrandLogo } from "@/components/brand-logo";
 import { GuardedForm, SubmitButton } from "@/components/form";
 
 export default async function LoginPage({
@@ -12,13 +13,8 @@ export default async function LoginPage({
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--accent-dim)] text-2xl font-bold text-[var(--accent)] shadow-[0_0_28px_var(--accent-glow)]">
-            A
-          </div>
-          <h1 className="brand-font text-3xl font-semibold text-white">
-            AGH <span className="text-[var(--accent)]">CENTRAL</span>
-          </h1>
-          <p className="mt-2 text-sm text-[var(--ink-muted)]">
+          <BrandLogo href="/login" size="login" />
+          <p className="mt-7 text-sm text-[var(--ink-muted)]">
             Ingresá con tu cuenta de administrador o cliente
           </p>
         </div>
