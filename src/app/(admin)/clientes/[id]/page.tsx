@@ -207,9 +207,6 @@ export default async function ClienteDetallePage({
                           <span className="rounded-md border border-[var(--accent)] bg-[rgba(182,255,59,0.1)] px-2 py-1 font-mono text-[var(--accent)]">
                             Voxel Cam · clientes_maquinas.id = {unidad.id}
                           </span>
-                          <span className="rounded-md border border-[var(--line)] px-2 py-1 font-mono text-[var(--ink-muted)]">
-                            Catálogo · id_maquina = {unidad.idMaquina}
-                          </span>
                         </div>
                       </div>
                       <Badge>
