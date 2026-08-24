@@ -9,11 +9,12 @@
     "dev": "next dev",
     "postinstall": "prisma generate --schema=prisma/schema.pg.prisma",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/prepare-db.cjs && next start",
     "lint": "next lint",
     "db:generate": "prisma generate --schema=prisma/schema.pg.prisma",
-    "db:tables": "tsx scripts/add-agh-usuarios.ts",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:tables": "node scripts/prepare-db.cjs",
+    "db:seed": "node scripts/prepare-db.cjs",
+    "db:prepare": "node scripts/prepare-db.cjs"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",

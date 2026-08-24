@@ -5,7 +5,7 @@
 Todo vive en **PostgreSQL** (`DATABASE_URL`):
 
 - Tablas existentes: `clientes`, `maquinas`, `cloud_users` (Voxel Cloud), etc.
-- Tablas de esta app: `agh_usuarios` (login) y `agh_soporte` (tickets del portal).
+- Tablas de esta app: `agh_usuarios` (login). Los arreglos van a `clientes_mantenimientos`.
 
 No uses `prisma db push` sobre esta base: las tablas nuevas se crean con el script de abajo.
 

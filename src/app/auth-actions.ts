@@ -6,9 +6,7 @@ import {
   SESSION_COOKIE,
   authenticate,
   createSessionToken,
-  requireCliente,
 } from "@/lib/auth";
-import { prismaPg } from "@/lib/prisma";
 
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") || "")
@@ -42,38 +40,4 @@ export async function logoutAction() {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
   redirect("/login");
-}
-
-export async function createSoporteAction(formData: FormData) {
-  const session = await requireCliente();
-  const titulo = String(formData.get("titulo") || "").trim();
-  const mensaje = String(formData.get("mensaje") || "").trim();
-  const raw = String(formData.get("maquinaId") || "").trim();
-  const idClienteMaquina = raw ? Number(raw) : null;
-
-  if (!titulo || !mensaje) {
-    throw new Error("Título y mensaje son obligatorios");
-  }
-
-  if (idClienteMaquina != null && Number.isInteger(idClienteMaquina)) {
-    const unidad = await prismaPg.clienteMaquina.findFirst({
-      where: { id: idClienteMaquina, idCliente: session.clienteId! },
-    });
-    if (!unidad) throw new Error("Máquina no válida");
-  }
-
-  await prismaPg.soporte.create({
-    data: {
-      clienteId: session.clienteId!,
-      idClienteMaquina:
-        idClienteMaquina != null && Number.isInteger(idClienteMaquina)
-          ? idClienteMaquina
-          : null,
-      titulo,
-      mensaje,
-      estado: "abierto",
-    },
-  });
-
-  redirect("/portal/soporte?ok=1");
 }

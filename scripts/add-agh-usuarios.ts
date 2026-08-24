@@ -5,7 +5,7 @@ async function main() {
   const p = new PrismaClient();
   try {
     await ensureAghTables(p);
-    console.log("OK: tablas agh_usuarios y agh_soporte");
+    console.log("OK: tabla agh_usuarios");
   } finally {
     await p.$disconnect();
   }

@@ -83,20 +83,6 @@ model Usuario {
   @@map("agh_usuarios")
 }
 
-/// Tickets del portal de clientes.
-model Soporte {
-  id               String   @id @default(cuid())
-  clienteId        Int      @map("cliente_id")
-  idClienteMaquina Int?     @map("id_cliente_maquina")
-  titulo           String   @db.VarChar(200)
-  mensaje          String
-  estado           String   @default("abierto") @db.VarChar(30)
-  creadoEn         DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
-
-  @@index([clienteId])
-  @@map("agh_soporte")
-}
-
 /// Usuarios existentes de Voxel Cloud.
 /// clienteId es la asociación con clientes.id, aunque la tabla no declara FK.
 model CloudUser {
