@@ -2,8 +2,7 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@prisma/client", "@prisma/client-sqlite", "@prisma/client-pg"],
-  // Fotos del catálogo llegan por Server Action
+  serverExternalPackages: ["@prisma/client", "@prisma/client-pg"],
   experimental: {
     serverActions: {
       bodySizeLimit: "6mb",
@@ -12,11 +11,10 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@prisma/client-sqlite": path.join(
+      "@prisma/client-pg": path.join(
         process.cwd(),
-        "node_modules/@prisma/client-sqlite"
+        "node_modules/@prisma/client-pg"
       ),
-      "@prisma/client-pg": path.join(process.cwd(), "node_modules/@prisma/client-pg"),
     };
     return config;
   },

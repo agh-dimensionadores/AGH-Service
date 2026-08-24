@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hashPassword, requireCliente } from "@/lib/auth";
-import { prisma, prismaPg } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
 import { readUploadedImage } from "@/lib/uploads";
 
 function str(formData: FormData, key: string) {
@@ -144,7 +144,7 @@ export async function createCloudUser(clienteId: number, formData: FormData) {
   redirect(`/clientes/${clienteId}?cloudUser=created`);
 }
 
-/** Usuario AGH Service (SQLite) — un solo acceso por cliente */
+/** Usuario AGH Service (PostgreSQL agh_usuarios) — un solo acceso por cliente */
 export async function createAghUsuario(clienteId: number, formData: FormData) {
   const email = str(formData, "email").toLowerCase();
   const password = str(formData, "password");
@@ -163,7 +163,7 @@ export async function createAghUsuario(clienteId: number, formData: FormData) {
   });
   if (!cliente) throw new Error("El cliente no existe");
 
-  const yaTiene = await prisma.usuario.findFirst({
+  const yaTiene = await prismaPg.usuario.findFirst({
     where: { clienteId, rol: "cliente" },
     select: { id: true },
   });
@@ -171,7 +171,7 @@ export async function createAghUsuario(clienteId: number, formData: FormData) {
     throw new Error("Este cliente ya tiene un usuario de AGH Service");
   }
 
-  const emailTaken = await prisma.usuario.findUnique({
+  const emailTaken = await prismaPg.usuario.findUnique({
     where: { email },
     select: { id: true },
   });
@@ -179,7 +179,7 @@ export async function createAghUsuario(clienteId: number, formData: FormData) {
     throw new Error("Ese email ya está en uso en AGH Service");
   }
 
-  await prisma.usuario.create({
+  await prismaPg.usuario.create({
     data: {
       email,
       nombre,
@@ -202,13 +202,13 @@ export async function resetAghUsuarioPassword(
     throw new Error("La contraseña debe tener al menos 6 caracteres");
   }
 
-  const user = await prisma.usuario.findFirst({
+  const user = await prismaPg.usuario.findFirst({
     where: { clienteId, rol: "cliente" },
     select: { id: true },
   });
   if (!user) throw new Error("Este cliente no tiene usuario de AGH Service");
 
-  await prisma.usuario.update({
+  await prismaPg.usuario.update({
     where: { id: user.id },
     data: { passwordHash: await hashPassword(password) },
   });

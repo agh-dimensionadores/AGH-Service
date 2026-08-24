@@ -2,13 +2,17 @@
   "name": "agh-service",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
+    "postinstall": "prisma generate --schema=prisma/schema.pg.prisma",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:generate": "prisma generate && prisma generate --schema=prisma/schema.pg.prisma",
-    "db:push": "prisma db push",
+    "db:generate": "prisma generate --schema=prisma/schema.pg.prisma",
+    "db:tables": "tsx scripts/add-agh-usuarios.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

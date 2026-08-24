@@ -16,7 +16,6 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-      "@prisma/client-sqlite": ["./node_modules/@prisma/client-sqlite"],
       "@prisma/client-pg": ["./node_modules/@prisma/client-pg"]
     }
   },

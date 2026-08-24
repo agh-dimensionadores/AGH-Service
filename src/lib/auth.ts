@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
 
 export const SESSION_COOKIE = "agh_session";
 
@@ -99,7 +99,7 @@ export async function requireCliente() {
 }
 
 export async function authenticate(email: string, password: string) {
-  const user = await prisma.usuario.findUnique({ where: { email } });
+  const user = await prismaPg.usuario.findUnique({ where: { email } });
   if (!user) return null;
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return null;

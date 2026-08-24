@@ -8,7 +8,7 @@ import {
   createSessionToken,
   requireCliente,
 } from "@/lib/auth";
-import { prisma, prismaPg } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
 
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") || "")
@@ -62,7 +62,7 @@ export async function createSoporteAction(formData: FormData) {
     if (!unidad) throw new Error("Máquina no válida");
   }
 
-  await prisma.soporte.create({
+  await prismaPg.soporte.create({
     data: {
       clienteId: session.clienteId!,
       idClienteMaquina:

@@ -1,43 +1,50 @@
-import { PrismaClient } from "../node_modules/@prisma/client-sqlite";
-import { PrismaClient as PgClient } from "../node_modules/@prisma/client-pg";
+import { PrismaClient } from "../node_modules/@prisma/client-pg";
 import bcrypt from "bcryptjs";
+import { ensureAghTables } from "../scripts/ensure-agh-tables";
 
-const prisma = new PrismaClient();
-const prismaPg = new PgClient();
+const prismaPg = new PrismaClient();
 
 async function main() {
-  await prisma.soporte.deleteMany();
-  await prisma.usuario.deleteMany();
+  await ensureAghTables(prismaPg);
 
   const cliente = await prismaPg.cliente.findFirst({ orderBy: { id: "asc" } });
+  const passwordHash = await bcrypt.hash("admin123", 10);
 
-  await prisma.usuario.create({
-    data: {
+  await prismaPg.usuario.upsert({
+    where: { email: "micaela@agh.com" },
+    update: {},
+    create: {
       email: "micaela@agh.com",
       nombre: "Micaela",
       rol: "admin",
-      passwordHash: await bcrypt.hash("admin123", 10),
+      passwordHash,
     },
   });
 
+  let clienteDemo: string | null = null;
   if (cliente) {
-    await prisma.usuario.create({
-      data: {
-        email: "cliente@mercadolibre.com",
-        nombre: "Portal Cliente",
-        rol: "cliente",
-        clienteId: cliente.id,
-        passwordHash: await bcrypt.hash("cliente123", 10),
-      },
-    });
+    const email = "cliente@mercadolibre.com";
+    const existente = await prismaPg.usuario.findUnique({ where: { email } });
+    if (!existente) {
+      await prismaPg.usuario.create({
+        data: {
+          email,
+          nombre: "Portal Cliente",
+          rol: "cliente",
+          clienteId: cliente.id,
+          passwordHash: await bcrypt.hash("cliente123", 10),
+        },
+      });
+    }
+    clienteDemo = `${email} / cliente123`;
   }
 
-  console.log("Seed listo (PostgreSQL no se modifica):", {
+  console.log("Seed listo (clientes / Voxel no se modifican):", {
     clientePortal: cliente
       ? { id: cliente.id, nombre: cliente.nombre }
       : "ninguno — creá un cliente en la app",
     admin: "micaela@agh.com / admin123",
-    clienteDemo: cliente ? "cliente@mercadolibre.com / cliente123" : null,
+    clienteDemo,
   });
 }
 
@@ -47,6 +54,5 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
     await prismaPg.$disconnect();
   });

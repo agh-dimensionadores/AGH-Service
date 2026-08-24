@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireCliente } from "@/lib/auth";
-import { prisma, prismaPg } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
 import { Badge, PageHeader, PrimaryLink } from "@/components/ui";
 import { formatDateTime, machineName } from "@/lib/utils";
 
@@ -22,7 +22,7 @@ export default async function PortalSoportePage({
 }) {
   const session = await requireCliente();
   const { ok } = await searchParams;
-  const tickets = await prisma.soporte.findMany({
+  const tickets = await prismaPg.soporte.findMany({
     where: { clienteId: session.clienteId! },
     orderBy: { creadoEn: "desc" },
   });

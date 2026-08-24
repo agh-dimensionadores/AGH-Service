@@ -68,6 +68,35 @@ model ClienteMantenimiento {
   @@map("clientes_mantenimientos")
 }
 
+/// Login de AGH Service. No confundir con cloud_users (Voxel Cloud).
+model Usuario {
+  id           String   @id @default(cuid())
+  email        String   @unique @db.VarChar(200)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  nombre       String   @db.VarChar(150)
+  rol          String   @db.VarChar(20)
+  /// ID del cliente en la tabla clientes (sin FK)
+  clienteId    Int?     @map("cliente_id")
+  creadoEn     DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  @@index([clienteId])
+  @@map("agh_usuarios")
+}
+
+/// Tickets del portal de clientes.
+model Soporte {
+  id               String   @id @default(cuid())
+  clienteId        Int      @map("cliente_id")
+  idClienteMaquina Int?     @map("id_cliente_maquina")
+  titulo           String   @db.VarChar(200)
+  mensaje          String
+  estado           String   @default("abierto") @db.VarChar(30)
+  creadoEn         DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  @@index([clienteId])
+  @@map("agh_soporte")
+}
+
 /// Usuarios existentes de Voxel Cloud.
 /// clienteId es la asociación con clientes.id, aunque la tabla no declara FK.
 model CloudUser {

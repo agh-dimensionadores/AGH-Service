@@ -8,7 +8,7 @@ import {
   updateCliente,
 } from "@/app/actions";
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
-import { prisma, prismaPg } from "@/lib/prisma";
+import { prismaPg } from "@/lib/prisma";
 import { getCliente } from "@/lib/clientes";
 import {
   Badge,
@@ -62,7 +62,7 @@ export default async function ClienteDetallePage({
       where: { clienteId: id },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.usuario.findFirst({
+    prismaPg.usuario.findFirst({
       where: { clienteId: id, rol: "cliente" },
       select: { id: true, email: true, nombre: true, creadoEn: true },
     }),

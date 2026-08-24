@@ -2,13 +2,16 @@
 
 ## Bases de datos
 
-- **PostgreSQL** (`DATABASE_URL`): solo la tabla existente `clientes` — no se crean tablas nuevas ahí.
-- **SQLite** (`DATABASE_URL_SQLITE`): máquinas, usuarios, mantenimientos, soporte.
+Todo vive en **PostgreSQL** (`DATABASE_URL`):
+
+- Tablas existentes: `clientes`, `maquinas`, `cloud_users` (Voxel Cloud), etc.
+- Tablas de esta app: `agh_usuarios` (login) y `agh_soporte` (tickets del portal).
+
+No uses `prisma db push` sobre esta base: las tablas nuevas se crean con el script de abajo.
 
 ```bash
 npm install
-npm run db:generate
-npx prisma db push
+npm run db:tables
 npm run db:seed
 npm run dev
 ```
