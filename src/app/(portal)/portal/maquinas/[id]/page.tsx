@@ -106,10 +106,10 @@ export default async function PortalMaquinaPage({
               Todavía no hay trabajos registrados en esta máquina.
             </p>
           ) : (
-            <ol className="relative space-y-0 border-l border-[var(--line)] pl-5">
+            <ol className="relative space-y-0 border-l border-[var(--line)] pl-6">
               {unidad.mantenimientos.map((item) => (
                 <li key={item.id} className="relative pb-5 last:pb-0">
-                  <span className="absolute -left-[0.33rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
+                  <span className="absolute -left-[1.45rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium text-white">
                       {mantenimientoTitulo(item)}

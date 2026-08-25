@@ -3,7 +3,7 @@
 import { createHash, randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { hashPassword, requireCliente } from "@/lib/auth";
+import { hashPassword, requireAdmin, requireCliente } from "@/lib/auth";
 import { prismaPg } from "@/lib/prisma";
 import { readUploadedImage } from "@/lib/uploads";
 
@@ -58,25 +58,26 @@ export async function createCliente(formData: FormData) {
   const token = newClientToken();
   const activo = optionalInt(formData, "activo") ?? 1;
 
-  // Un solo round-trip a Render: insert + set cliente_id = id
-  const rows = await prismaPg.$queryRaw<{ id: number }[]>`
-    WITH inserted AS (
-      INSERT INTO clientes (nombre, empresa, email, token, activo, fecha_creacion)
-      VALUES (${nombre}, ${empresa}, ${email}, ${token}, ${activo}, NOW())
-      RETURNING id
-    )
-    UPDATE clientes AS c
-    SET cliente_id = inserted.id
-    FROM inserted
-    WHERE c.id = inserted.id
-    RETURNING c.id
-  `;
+  const created = await prismaPg.cliente.create({
+    data: {
+      nombre,
+      empresa,
+      email,
+      token,
+      activo,
+      fechaCreacion: new Date(),
+    },
+    select: { id: true },
+  });
 
-  const id = rows[0]?.id;
-  if (!id) throw new Error("No se pudo crear el cliente");
+  // Mantener cliente_id alineado con id (columna legacy / otras apps)
+  await prismaPg.cliente.update({
+    where: { id: created.id },
+    data: { clienteId: created.id },
+  });
 
   touch("/clientes");
-  redirect(`/clientes/${id}`);
+  redirect(`/clientes/${created.id}`);
 }
 
 export async function updateCliente(id: number, formData: FormData) {
@@ -215,6 +216,59 @@ export async function resetAghUsuarioPassword(
 
   touch(`/clientes/${clienteId}`);
   redirect(`/clientes/${clienteId}?aghUser=password`);
+}
+
+/** Admin: crear otro usuario administrador (sin cliente asociado). */
+export async function createAdminUsuario(formData: FormData) {
+  await requireAdmin();
+
+  const email = str(formData, "email").toLowerCase();
+  const password = str(formData, "password");
+  const nombre = str(formData, "nombre") || "Administrador";
+
+  if (!email || !email.includes("@")) {
+    throw new Error("Ingresá un email válido");
+  }
+  if (password.length < 6) {
+    throw new Error("La contraseña debe tener al menos 6 caracteres");
+  }
+
+  const emailTaken = await prismaPg.usuario.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+  if (emailTaken) {
+    throw new Error("Ese email ya está en uso");
+  }
+
+  await prismaPg.usuario.create({
+    data: {
+      email,
+      nombre,
+      rol: "admin",
+      clienteId: null,
+      passwordHash: await hashPassword(password),
+    },
+  });
+
+  touch("/configuracion");
+  redirect("/configuracion?admin=created");
+}
+
+export async function resetAdminUsuarioPassword(formData: FormData) {
+  const session = await requireAdmin();
+  const password = str(formData, "password");
+  if (password.length < 6) {
+    throw new Error("La contraseña debe tener al menos 6 caracteres");
+  }
+
+  await prismaPg.usuario.update({
+    where: { id: session.id },
+    data: { passwordHash: await hashPassword(password) },
+  });
+
+  touch("/configuracion");
+  redirect("/configuracion?admin=password");
 }
 
 /** Cliente portal: solicitar mantenimiento / arreglo */
@@ -405,21 +459,32 @@ export async function createMantenimiento(formData: FormData) {
 }
 
 export async function updateMantenimiento(id: number, formData: FormData) {
+  const existing = await prismaPg.clienteMantenimiento.findUnique({
+    where: { id },
+    select: { id: true, tipo: true, descripcion: true, solicitado: true },
+  });
+  if (!existing) throw new Error("Mantenimiento no encontrado");
+
   const idClienteMaquina = requiredInt(formData, "maquinaId");
-  const tipo = str(formData, "tipo");
-  if (!tipo) throw new Error("El tipo es obligatorio");
+  const estado = str(formData, "estado") || "abierto";
+  let arreglado = optionalDate(formData, "arreglado");
+  if (estado === "cerrado" && !arreglado) {
+    arreglado = new Date();
+  }
 
   await prismaPg.clienteMantenimiento.update({
     where: { id },
     data: {
       idClienteMaquina,
-      tipo,
-      descripcion: optionalStr(formData, "descripcion"),
-      estado: str(formData, "estado") || "abierto",
-      solicitado: optionalDate(formData, "solicitado") ?? new Date(),
-      arreglado: optionalDate(formData, "arreglado"),
+      // Lo que pidió el cliente no se edita desde acá
+      tipo: existing.tipo,
+      descripcion: existing.descripcion,
+      solicitado: existing.solicitado,
+      estado,
+      arreglado,
       programado: optionalDateTimeLocal(formData, "programado"),
       asignadoA: optionalStr(formData, "asignadoA"),
+      comentarioArreglo: optionalStr(formData, "comentarioArreglo"),
     },
   });
 

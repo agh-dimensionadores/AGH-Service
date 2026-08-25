@@ -63,6 +63,8 @@ model ClienteMantenimiento {
   programado        DateTime?      @db.Timestamptz(6)
   /// Quién va (texto libre)
   asignadoA         String?        @map("asignado_a") @db.VarChar(150)
+  /// Comentario interno de AGH al cerrar / resolver
+  comentarioArreglo String?        @map("comentario_arreglo")
   instalacion       ClienteMaquina @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
 
   @@map("clientes_mantenimientos")

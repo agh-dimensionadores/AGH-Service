@@ -13,7 +13,7 @@ import {
 } from "@/components/ui";
 import {
   ESTADOS_MANTENIMIENTO,
-  TIPOS_MANTENIMIENTO,
+  formatDate,
   labelEstado,
   machineName,
   mantenimientoTitulo,
@@ -87,6 +87,30 @@ export default async function MantenimientoDetallePage({
       />
 
       <Panel className="max-w-2xl">
+        <div className="mb-5 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-muted)]">
+            Pedido del cliente (no editable)
+          </p>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-[var(--ink-muted)]">Tipo</dt>
+              <dd className="mt-0.5 text-sm text-white">{item.tipo}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--ink-muted)]">Solicitado</dt>
+              <dd className="mt-0.5 text-sm text-white">
+                {formatDate(item.solicitado)}
+              </dd>
+            </div>
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[var(--ink-muted)]">Descripción</dt>
+              <dd className="mt-0.5 whitespace-pre-wrap text-sm text-white">
+                {item.descripcion?.trim() || "Sin descripción"}
+              </dd>
+            </div>
+          </dl>
+        </div>
+
         <GuardedForm action={update} className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Field label="Equipo *">
@@ -105,15 +129,6 @@ export default async function MantenimientoDetallePage({
               </select>
             </Field>
           </div>
-          <Field label="Tipo *">
-            <select name="tipo" required defaultValue={item.tipo} className={inputClass}>
-              {TIPOS_MANTENIMIENTO.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {tipo}
-                </option>
-              ))}
-            </select>
-          </Field>
           <Field label="Estado">
             <select name="estado" defaultValue={item.estado} className={inputClass}>
               {ESTADOS_MANTENIMIENTO.map((estado) => (
@@ -122,24 +137,6 @@ export default async function MantenimientoDetallePage({
                 </option>
               ))}
             </select>
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Descripción">
-              <textarea
-                name="descripcion"
-                rows={5}
-                defaultValue={item.descripcion ?? ""}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-          <Field label="Solicitado">
-            <input
-              name="solicitado"
-              type="date"
-              defaultValue={toDateInput(item.solicitado)}
-              className={inputClass}
-            />
           </Field>
           <Field label="Arreglado">
             <input
@@ -167,6 +164,20 @@ export default async function MantenimientoDetallePage({
               className={inputClass}
             />
           </Field>
+          <div className="sm:col-span-2">
+            <Field label="Comentario del arreglo (AGH)">
+              <textarea
+                name="comentarioArreglo"
+                rows={4}
+                defaultValue={item.comentarioArreglo ?? ""}
+                placeholder="Qué se hizo, repuestos, observaciones internas…"
+                className={inputClass}
+              />
+            </Field>
+            <p className="mt-1 text-xs text-[var(--ink-muted)]">
+              Ideal al marcar el trabajo como cerrado.
+            </p>
+          </div>
           <div className="sm:col-span-2 flex flex-wrap gap-2">
             <SubmitButton>Guardar cambios</SubmitButton>
             <DangerButton formAction={remove}>Eliminar trabajo</DangerButton>

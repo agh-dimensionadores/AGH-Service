@@ -55,12 +55,6 @@ export default async function LoginPage({
               Ingresar
             </SubmitButton>
           </GuardedForm>
-
-          <div className="mt-5 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 text-xs text-[var(--ink-muted)]">
-            <p className="font-medium text-[#d8e0da]">Cuentas de prueba</p>
-            <p className="mt-2">Admin: micaela@agh.com / admin123</p>
-            <p>Cliente: cliente@mercadolibre.com / cliente123</p>
-          </div>
         </div>
       </div>
     </div>
