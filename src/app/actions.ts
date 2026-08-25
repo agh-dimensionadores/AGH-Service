@@ -394,21 +394,65 @@ export async function asignarMaquina(formData: FormData) {
   const numeroSerie = str(formData, "numeroSerie");
   if (!numeroSerie) throw new Error("El nro. de serie es obligatorio");
 
+  const modalidadRaw = str(formData, "modalidad") || "venta";
+  const modalidad = modalidadRaw === "alquiler" ? "alquiler" : "venta";
+
+  let fechaInicioAlquiler: Date | null = null;
+  let fechaFinAlquiler: Date | null = null;
+  let comentarioAlquiler: string | null = null;
+
+  if (modalidad === "alquiler") {
+    fechaInicioAlquiler = optionalDate(formData, "fechaInicioAlquiler");
+    fechaFinAlquiler = optionalDate(formData, "fechaFinAlquiler");
+    comentarioAlquiler = optionalStr(formData, "comentarioAlquiler");
+    if (!fechaInicioAlquiler || !fechaFinAlquiler) {
+      throw new Error("En alquiler son obligatorias fecha de inicio y fin");
+    }
+    if (fechaFinAlquiler < fechaInicioAlquiler) {
+      throw new Error("La fecha de fin no puede ser anterior al inicio");
+    }
+  }
+
   const unidad = await prismaPg.clienteMaquina.create({
     data: {
       idCliente,
       idMaquina,
       numeroSerie,
       sitio: optionalStr(formData, "ubicacion"),
-      fechaCompra: optionalDate(formData, "fechaCompra"),
+      modalidad,
+      fechaCompra:
+        modalidad === "venta" ? optionalDate(formData, "fechaCompra") : null,
+      fechaFabricacion: optionalDate(formData, "fechaFabricacion"),
     },
   });
+
+  if (
+    modalidad === "alquiler" &&
+    fechaInicioAlquiler &&
+    fechaFinAlquiler
+  ) {
+    await prismaPg.maquinaAlquiler.create({
+      data: {
+        idClienteMaquina: unidad.id,
+        idCliente,
+        fechaInicio: fechaInicioAlquiler,
+        fechaFin: fechaFinAlquiler,
+        comentario: comentarioAlquiler,
+      },
+    });
+  }
 
   touch("/maquinas", `/clientes/${idCliente}`);
   redirect(`/maquinas/${unidad.id}`);
 }
 
 export async function updateMaquina(id: number, formData: FormData) {
+  const existing = await prismaPg.clienteMaquina.findUnique({
+    where: { id },
+    select: { id: true, modalidad: true },
+  });
+  if (!existing) throw new Error("Equipo no encontrado");
+
   const idCliente = requiredInt(formData, "clienteId");
   const idMaquina = requiredInt(formData, "catalogoId");
   const numeroSerie = str(formData, "numeroSerie");
@@ -421,12 +465,81 @@ export async function updateMaquina(id: number, formData: FormData) {
       idMaquina,
       numeroSerie,
       sitio: optionalStr(formData, "ubicacion"),
-      fechaCompra: optionalDate(formData, "fechaCompra"),
+      // modalidad no se cambia acá
+      modalidad: existing.modalidad,
+      fechaCompra:
+        existing.modalidad === "venta"
+          ? optionalDate(formData, "fechaCompra")
+          : null,
+      fechaFabricacion: optionalDate(formData, "fechaFabricacion"),
     },
   });
 
   touch(`/maquinas/${id}`, "/maquinas", `/clientes/${idCliente}`);
   redirect(`/maquinas/${id}`);
+}
+
+/** Solo permite cambiar fecha de fin (y comentario) del alquiler activo. */
+export async function updateAlquilerFin(alquilerId: number, formData: FormData) {
+  const alquiler = await prismaPg.maquinaAlquiler.findUnique({
+    where: { id: alquilerId },
+  });
+  if (!alquiler) throw new Error("Alquiler no encontrado");
+
+  const fechaFin = optionalDate(formData, "fechaFin");
+  if (!fechaFin) throw new Error("La fecha de fin es obligatoria");
+  if (fechaFin < alquiler.fechaInicio) {
+    throw new Error("La fecha de fin no puede ser anterior al inicio");
+  }
+
+  await prismaPg.maquinaAlquiler.update({
+    where: { id: alquilerId },
+    data: {
+      fechaFin,
+      comentario: optionalStr(formData, "comentario"),
+      // fechaInicio e idCliente no se tocan
+    },
+  });
+
+  touch(`/maquinas/${alquiler.idClienteMaquina}`);
+  redirect(`/maquinas/${alquiler.idClienteMaquina}?alquiler=ok`);
+}
+
+/** Nuevo período de alquiler sobre la misma unidad. */
+export async function crearPeriodoAlquiler(
+  idClienteMaquina: number,
+  formData: FormData
+) {
+  const unidad = await prismaPg.clienteMaquina.findUnique({
+    where: { id: idClienteMaquina },
+    select: { id: true, idCliente: true, modalidad: true },
+  });
+  if (!unidad) throw new Error("Equipo no encontrado");
+  if (unidad.modalidad !== "alquiler") {
+    throw new Error("Este equipo no está en modalidad alquiler");
+  }
+
+  const fechaInicio = optionalDate(formData, "fechaInicio");
+  const fechaFin = optionalDate(formData, "fechaFin");
+  if (!fechaInicio || !fechaFin) {
+    throw new Error("Inicio y fin son obligatorios");
+  }
+  if (fechaFin < fechaInicio) {
+    throw new Error("La fecha de fin no puede ser anterior al inicio");
+  }
+
+  await prismaPg.maquinaAlquiler.create({
+    data: {
+      idClienteMaquina,
+      idCliente: unidad.idCliente,
+      fechaInicio,
+      fechaFin,
+      comentario: optionalStr(formData, "comentario"),
+    },
+  });
+
+  touch(`/maquinas/${idClienteMaquina}`);
+  redirect(`/maquinas/${idClienteMaquina}?alquiler=nuevo`);
 }
 
 export async function deleteMaquina(id: number) {
@@ -446,9 +559,8 @@ export async function createMantenimiento(formData: FormData) {
       idClienteMaquina,
       tipo,
       descripcion,
-      estado: str(formData, "estado") || "abierto",
+      estado: "abierto",
       solicitado: optionalDate(formData, "solicitado") ?? new Date(),
-      arreglado: optionalDate(formData, "arreglado"),
       programado: optionalDateTimeLocal(formData, "programado"),
       asignadoA: optionalStr(formData, "asignadoA"),
     },
@@ -461,16 +573,18 @@ export async function createMantenimiento(formData: FormData) {
 export async function updateMantenimiento(id: number, formData: FormData) {
   const existing = await prismaPg.clienteMantenimiento.findUnique({
     where: { id },
-    select: { id: true, tipo: true, descripcion: true, solicitado: true },
+    select: {
+      id: true,
+      tipo: true,
+      descripcion: true,
+      solicitado: true,
+      estado: true,
+      arreglado: true,
+    },
   });
   if (!existing) throw new Error("Mantenimiento no encontrado");
 
   const idClienteMaquina = requiredInt(formData, "maquinaId");
-  const estado = str(formData, "estado") || "abierto";
-  let arreglado = optionalDate(formData, "arreglado");
-  if (estado === "cerrado" && !arreglado) {
-    arreglado = new Date();
-  }
 
   await prismaPg.clienteMantenimiento.update({
     where: { id },
@@ -480,8 +594,9 @@ export async function updateMantenimiento(id: number, formData: FormData) {
       tipo: existing.tipo,
       descripcion: existing.descripcion,
       solicitado: existing.solicitado,
-      estado,
-      arreglado,
+      // El estado solo cambia con "Cerrar trabajo"
+      estado: existing.estado,
+      arreglado: existing.arreglado,
       programado: optionalDateTimeLocal(formData, "programado"),
       asignadoA: optionalStr(formData, "asignadoA"),
       comentarioArreglo: optionalStr(formData, "comentarioArreglo"),
@@ -494,13 +609,54 @@ export async function updateMantenimiento(id: number, formData: FormData) {
     "/mantenimientos",
     "/calendario"
   );
-  redirect(`/maquinas/${idClienteMaquina}`);
+  redirect(`/mantenimientos/${id}`);
 }
 
-export async function deleteMantenimiento(id: number) {
-  const item = await prismaPg.clienteMantenimiento.delete({ where: { id } });
-  touch(`/maquinas/${item.idClienteMaquina}`, "/mantenimientos", "/calendario");
-  redirect(`/maquinas/${item.idClienteMaquina}`);
+export async function cerrarMantenimiento(id: number, formData: FormData) {
+  const existing = await prismaPg.clienteMantenimiento.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      tipo: true,
+      descripcion: true,
+      solicitado: true,
+      idClienteMaquina: true,
+      estado: true,
+    },
+  });
+  if (!existing) throw new Error("Mantenimiento no encontrado");
+  if (existing.estado === "cerrado") {
+    redirect(`/mantenimientos/${id}`);
+  }
+
+  const comentarioArreglo = optionalStr(formData, "comentarioArreglo");
+  const arreglado = optionalDate(formData, "arreglado") ?? new Date();
+
+  await prismaPg.clienteMantenimiento.update({
+    where: { id },
+    data: {
+      tipo: existing.tipo,
+      descripcion: existing.descripcion,
+      solicitado: existing.solicitado,
+      estado: "cerrado",
+      arreglado,
+      comentarioArreglo,
+      programado: optionalDateTimeLocal(formData, "programado"),
+      asignadoA: optionalStr(formData, "asignadoA"),
+    },
+  });
+
+  touch(
+    `/mantenimientos/${id}`,
+    `/maquinas/${existing.idClienteMaquina}`,
+    "/mantenimientos",
+    "/calendario"
+  );
+  redirect(`/mantenimientos/${id}?cerrado=1`);
+}
+
+export async function deleteMantenimiento(_id: number) {
+  throw new Error("Los trabajos de mantenimiento no se pueden eliminar");
 }
 
 /** Agenda: asignar un pendiente a un día (hora y quién opcionales). */

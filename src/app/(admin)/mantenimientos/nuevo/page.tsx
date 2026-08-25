@@ -10,12 +10,7 @@ import {
   SecondaryLink,
   inputClass,
 } from "@/components/ui";
-import {
-  ESTADOS_MANTENIMIENTO,
-  TIPOS_MANTENIMIENTO,
-  labelEstado,
-  machineName,
-} from "@/lib/utils";
+import { TIPOS_MANTENIMIENTO, machineName } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +30,7 @@ export default async function NuevoMantenimientoPage({
     <div>
       <PageHeader
         title="Nuevo mantenimiento"
-        description="Registrá el trabajo en clientes_mantenimientos."
+        description="Se registra siempre como abierto. Después lo cerrás cuando lo realicen."
         action={<SecondaryLink href="/mantenimientos">Volver</SecondaryLink>}
       />
       <Panel className="max-w-2xl">
@@ -78,14 +73,13 @@ export default async function NuevoMantenimientoPage({
                 ))}
               </select>
             </Field>
-            <Field label="Estado">
-              <select name="estado" className={inputClass} defaultValue="abierto">
-                {ESTADOS_MANTENIMIENTO.map((estado) => (
-                  <option key={estado} value={estado}>
-                    {labelEstado(estado)}
-                  </option>
-                ))}
-              </select>
+            <Field label="Solicitado">
+              <input
+                name="solicitado"
+                type="date"
+                className={inputClass}
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
             </Field>
             <div className="sm:col-span-2">
               <Field label="Descripción">
@@ -97,19 +91,8 @@ export default async function NuevoMantenimientoPage({
                 />
               </Field>
             </div>
-            <Field label="Solicitado">
-              <input
-                name="solicitado"
-                type="date"
-                className={inputClass}
-                defaultValue={new Date().toISOString().slice(0, 10)}
-              />
-            </Field>
-            <Field label="Arreglado">
-              <input name="arreglado" type="date" className={inputClass} />
-            </Field>
             <div className="sm:col-span-2">
-              <SubmitButton>Guardar en expediente</SubmitButton>
+              <SubmitButton>Guardar solicitud</SubmitButton>
             </div>
           </GuardedForm>
         )}

@@ -88,10 +88,14 @@ export default async function PortalMaquinaPage({
               <dt className="text-[var(--ink-muted)]">Sitio</dt>
               <dd className="text-white">{unidad.sitio || "—"}</dd>
             </div>
-            <div>
+            <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Fecha de compra</dt>
+              <dd className="text-white">{formatDate(unidad.fechaCompra)}</dd>
+            </div>
+            <div>
+              <dt className="text-[var(--ink-muted)]">Fecha de fabricación</dt>
               <dd className="mt-1 text-white">
-                {formatDate(unidad.fechaCompra)}
+                {formatDate(unidad.fechaFabricacion)}
               </dd>
             </div>
           </dl>

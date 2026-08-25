@@ -1,18 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deleteMantenimiento, updateMantenimiento } from "@/app/actions";
-import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
+import {
+  cerrarMantenimiento,
+  updateMantenimiento,
+} from "@/app/actions";
+import { GuardedForm, SubmitButton } from "@/components/form";
 import { prismaPg } from "@/lib/prisma";
 import { getCliente, getClientesMap, clienteLabel } from "@/lib/clientes";
 import {
+  Badge,
   Field,
   PageHeader,
   Panel,
   SecondaryLink,
+  estadoTone,
   inputClass,
 } from "@/components/ui";
 import {
-  ESTADOS_MANTENIMIENTO,
   formatDate,
   labelEstado,
   machineName,
@@ -43,10 +47,13 @@ function toDateTimeLocal(value?: Date | null) {
 
 export default async function MantenimientoDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ cerrado?: string }>;
 }) {
   const { id: idParam } = await params;
+  const { cerrado } = await searchParams;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
@@ -69,7 +76,8 @@ export default async function MantenimientoDetallePage({
   ]);
 
   const update = updateMantenimiento.bind(null, item.id);
-  const remove = deleteMantenimiento.bind(null, item.id);
+  const cerrar = cerrarMantenimiento.bind(null, item.id);
+  const estaCerrado = item.estado === "cerrado";
 
   return (
     <div>
@@ -86,7 +94,20 @@ export default async function MantenimientoDetallePage({
         }
       />
 
+      {cerrado === "1" ? (
+        <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+          Trabajo marcado como cerrado.
+        </p>
+      ) : null}
+
       <Panel className="max-w-2xl">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] px-4 py-3">
+          <p className="text-sm text-[var(--ink-muted)]">Estado actual</p>
+          <Badge tone={estadoTone(item.estado)}>
+            {labelEstado(item.estado)}
+          </Badge>
+        </div>
+
         <div className="mb-5 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-muted)]">
             Pedido del cliente (no editable)
@@ -129,23 +150,6 @@ export default async function MantenimientoDetallePage({
               </select>
             </Field>
           </div>
-          <Field label="Estado">
-            <select name="estado" defaultValue={item.estado} className={inputClass}>
-              {ESTADOS_MANTENIMIENTO.map((estado) => (
-                <option key={estado} value={estado}>
-                  {labelEstado(estado)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Arreglado">
-            <input
-              name="arreglado"
-              type="date"
-              defaultValue={toDateInput(item.arreglado)}
-              className={inputClass}
-            />
-          </Field>
           <Field label="Programado (agenda)">
             <input
               name="programado"
@@ -172,15 +176,43 @@ export default async function MantenimientoDetallePage({
                 defaultValue={item.comentarioArreglo ?? ""}
                 placeholder="Qué se hizo, repuestos, observaciones internas…"
                 className={inputClass}
+                readOnly={estaCerrado}
               />
             </Field>
-            <p className="mt-1 text-xs text-[var(--ink-muted)]">
-              Ideal al marcar el trabajo como cerrado.
-            </p>
           </div>
+
+          {estaCerrado ? (
+            <div className="sm:col-span-2 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
+              Cerrado el {formatDate(item.arreglado)}.
+            </div>
+          ) : (
+            <div className="sm:col-span-2 grid gap-3 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4 sm:grid-cols-[1fr_auto] sm:items-end">
+              <Field label="Fecha de arreglo (al cerrar)">
+                <input
+                  name="arreglado"
+                  type="date"
+                  defaultValue={toDateInput(new Date())}
+                  className={inputClass}
+                />
+              </Field>
+              <button
+                type="submit"
+                formAction={cerrar}
+                className="btn-primary"
+              >
+                Cerrar trabajo
+              </button>
+              <p className="sm:col-span-2 text-xs text-[var(--ink-muted)]">
+                Marca el pedido como realizado. Podés completar el comentario
+                arriba antes de cerrar.
+              </p>
+            </div>
+          )}
+
           <div className="sm:col-span-2 flex flex-wrap gap-2">
-            <SubmitButton>Guardar cambios</SubmitButton>
-            <DangerButton formAction={remove}>Eliminar trabajo</DangerButton>
+            {!estaCerrado ? (
+              <SubmitButton>Guardar cambios</SubmitButton>
+            ) : null}
           </div>
         </GuardedForm>
         <p className="mt-4 text-sm text-[var(--ink-muted)]">

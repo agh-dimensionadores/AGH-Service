@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { asignarMaquina } from "@/app/actions";
+import { AsignacionModalidadFields } from "@/components/asignacion-modalidad";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { prismaPg } from "@/lib/prisma";
 import { listClientes, clienteLabel } from "@/lib/clientes";
@@ -40,7 +41,7 @@ export default async function AsignarMaquinaPage({
     <div>
       <PageHeader
         title="Asignar máquina"
-        description="Vinculá un modelo del catálogo a un cliente: nro. de serie, sitio y fecha de compra."
+        description="Venta o alquiler: nro. de serie, sitio y fechas según la modalidad."
         action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
       />
       <Panel className="max-w-2xl">
@@ -127,8 +128,15 @@ export default async function AsignarMaquinaPage({
             <Field label="Nro. de serie *">
               <input name="numeroSerie" required className={inputClass} />
             </Field>
-            <Field label="Fecha de compra">
-              <input name="fechaCompra" type="date" className={inputClass} />
+
+            <AsignacionModalidadFields />
+
+            <Field label="Fecha de fabricación">
+              <input
+                name="fechaFabricacion"
+                type="date"
+                className={inputClass}
+              />
             </Field>
             <Field label="Sitio / ubicación">
               <input

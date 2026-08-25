@@ -8,6 +8,15 @@ export function formatDate(value?: Date | string | null) {
   }).format(date);
 }
 
+export function daysBetween(start?: Date | string | null, end?: Date | string | null) {
+  if (!start || !end) return null;
+  const a = typeof start === "string" ? new Date(start) : start;
+  const b = typeof end === "string" ? new Date(end) : end;
+  const ms = b.getTime() - a.getTime();
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+}
+
 export function formatDateTime(value?: Date | string | null) {
   if (!value) return "—";
   const date = typeof value === "string" ? new Date(value) : value;
