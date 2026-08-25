@@ -136,17 +136,12 @@ export default async function ClienteDetallePage({
               </select>
             </Field>
             <div className="rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 text-sm sm:col-span-2">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <p className="text-[var(--ink-muted)]">ID</p>
-                  <p className="mt-1 font-mono text-white">{cliente.id}</p>
-                </div>
-                <div>
-                  <p className="text-[var(--ink-muted)]">cliente_id</p>
-                  <p className="mt-1 font-mono text-white">
-                    {cliente.clienteId ?? "—"}
-                  </p>
-                </div>
+              <div>
+                <p className="text-[var(--ink-muted)]">ID</p>
+                <p className="mt-1 font-mono text-white">{cliente.id}</p>
+                <p className="mt-1 text-xs text-[var(--ink-muted)]">
+                  Usalo en Voxel Cam como VOXEL_CLIENT_ID
+                </p>
               </div>
               <p className="mt-3 text-[var(--ink-muted)]">Token</p>
               <p className="mt-1 break-all font-mono text-xs text-white">
