@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import PDFDocument from "pdfkit";
 import {
   CUBISCAN_CHECK_SECTIONS,
@@ -23,6 +25,58 @@ function isChecked(val: string | boolean | undefined) {
   return val === true || val === "true" || val === "on" || val === "si";
 }
 
+function logoPath(...names: string[]) {
+  for (const name of names) {
+    const full = path.join(process.cwd(), "assets", name);
+    if (fs.existsSync(full)) return full;
+  }
+  return null;
+}
+
+/** Foto chica del modelo según el texto de "Modelo" de la planilla. */
+function resolveMaquinaImage(modelo: string) {
+  const key = (modelo || "").toLowerCase().replace(/\s+/g, "");
+  const dir = path.join(process.cwd(), "assets", "maquinas");
+  if (!fs.existsSync(dir)) return null;
+
+  const preferred: { test: RegExp; files: string[] }[] = [
+    {
+      test: /100|150/,
+      files: ["cubiscan100-pdf.png", "cubiscan100.png"],
+    },
+  ];
+
+  for (const rule of preferred) {
+    if (!rule.test.test(key) && !rule.test.test(modelo || "")) continue;
+    for (const file of rule.files) {
+      const full = path.join(dir, file);
+      if (fs.existsSync(full)) return full;
+    }
+  }
+
+  // Fallback: primer archivo del directorio
+  const any = fs
+    .readdirSync(dir)
+    .find((f) => /\.(png|jpe?g|webp)$/i.test(f));
+  return any ? path.join(dir, any) : null;
+}
+
+function tryImage(
+  doc: PDFKit.PDFDocument,
+  file: string | null,
+  x: number,
+  y: number,
+  fit: [number, number]
+) {
+  if (!file) return false;
+  try {
+    doc.image(file, x, y, { fit });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** PDF con el layout de la planilla impresa CubiScan / Logintec. */
 export function buildCubiscanOrdenPdf(opts: {
   payload: CubiscanOrdenPayload;
@@ -30,6 +84,13 @@ export function buildCubiscanOrdenPdf(opts: {
   firmaCliente?: string | null;
 }): Promise<Buffer> {
   const { payload: p, firmaIngeniero, firmaCliente } = opts;
+  const cubiscanLogo = logoPath("logocubiscan2-pdf.png", "logocubiscan2.png");
+  const logintecLogo = logoPath(
+    "logologintec-black.png",
+    "logologintec.png"
+  );
+  const montraLogo = logoPath("logomontra-pdf.png", "logomontra.png");
+  const maquinaImg = resolveMaquinaImage(p.modelo);
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
@@ -47,7 +108,7 @@ export function buildCubiscanOrdenPdf(opts: {
 
     const W = doc.page.width;
     const H = doc.page.height;
-    const M = 18;
+    const M = 16;
     const contentW = W - M * 2;
     const gray = "#5a5a5a";
     const lightGray = "#e8e8e8";
@@ -61,14 +122,14 @@ export function buildCubiscanOrdenPdf(opts: {
     };
 
     const sectionBar = (y: number, title: string) => {
-      drawBox(M, y, contentW, 16, gray);
+      drawBox(M, y, contentW, 15, gray);
       doc
         .fillColor("#fff")
         .font("Helvetica-Bold")
-        .fontSize(9)
-        .text(title, M + 6, y + 4, { width: contentW - 12 });
+        .fontSize(8.5)
+        .text(title, M + 6, y + 3.5, { width: contentW - 12 });
       doc.fillColor("#000");
-      return y + 16;
+      return y + 15;
     };
 
     const checkbox = (x: number, y: number, checked: boolean, size = 8) => {
@@ -109,87 +170,111 @@ export function buildCubiscanOrdenPdf(opts: {
       doc.font("Helvetica");
     };
 
-    // ——— Header bar ———
+    // ——— Title bar ———
     let y = M;
-    drawBox(M, y, contentW, 28, gray);
+    drawBox(M, y, contentW, 26, gray);
     doc
       .fillColor("#fff")
       .font("Helvetica-Bold")
-      .fontSize(11)
-      .text("Orden de Servicio para Equipo CubiScan", M + 8, y + 5, {
-        width: contentW * 0.62,
+      .fontSize(10.5)
+      .text("Orden de Servicio para Equipo CubiScan", M + 8, y + 4, {
+        width: contentW * 0.58,
       });
     doc
-      .fontSize(9)
-      .text(`Modelo ${p.modelo || "CubiScan"}`, M + contentW * 0.58, y + 8, {
-        width: contentW * 0.4,
+      .fontSize(8.5)
+      .text(`Modelo ${p.modelo || "CubiScan"}`, M + contentW * 0.55, y + 7, {
+        width: contentW * 0.43,
         align: "right",
       });
     doc.fillColor("#000");
-    y += 32;
+    y += 30;
 
-    // ——— Logos + company + orden box ———
-    const headerH = 78;
-    drawBox(M, y, contentW, headerH);
+    // ——— Brand row: logos + machine + company ———
+    const brandH = 52;
+    drawBox(M, y, contentW, brandH);
 
-    // Cubiscan wordmark
-    doc.font("Helvetica-Bold").fontSize(14).text("CUBISCAN", M + 8, y + 8);
-    doc.font("Helvetica").fontSize(6).fillColor("#555").text("by Quantronix", M + 8, y + 24);
-    doc.fillColor("#000");
+    // CubiScan (izq)
+    if (
+      !tryImage(doc, cubiscanLogo, M + 6, y + 10, [118, 32])
+    ) {
+      doc.font("Helvetica-Bold").fontSize(11).text("CUBISCAN", M + 8, y + 18);
+    }
 
-    // Center company
-    const cx = M + contentW * 0.28;
+    // Foto del equipo (junto al logo CubiScan)
+    const machineX = M + 130;
+    drawBox(machineX, y + 5, 42, 42);
+    if (
+      !tryImage(doc, maquinaImg, machineX + 2, y + 7, [38, 38])
+    ) {
+      doc
+        .font("Helvetica")
+        .fontSize(6)
+        .fillColor("#888")
+        .text("foto", machineX + 10, y + 22);
+      doc.fillColor("#000");
+    }
+
+    // Datos Logintec (centro)
+    const cx = M + 182;
+    const cW = contentW - 182 - 130;
     doc
       .font("Helvetica-Bold")
-      .fontSize(9)
-      .text(CUBISCAN_EMPRESA.nombre, cx, y + 6, { width: contentW * 0.34, align: "center" });
-    doc
-      .font("Helvetica")
-      .fontSize(6.5)
-      .text(CUBISCAN_EMPRESA.direccion, cx, y + 18, {
-        width: contentW * 0.34,
+      .fontSize(8.5)
+      .fillColor("#000")
+      .text(CUBISCAN_EMPRESA.nombre, cx, y + 5, {
+        width: cW,
         align: "center",
       });
-    doc.text(CUBISCAN_EMPRESA.telefono, cx, y + 28, {
-      width: contentW * 0.34,
+    doc.font("Helvetica").fontSize(6);
+    doc.text(CUBISCAN_EMPRESA.direccion, cx, y + 16, {
+      width: cW,
       align: "center",
     });
-    doc.text(CUBISCAN_EMPRESA.web, cx, y + 38, {
-      width: contentW * 0.34,
+    doc.text(CUBISCAN_EMPRESA.telefono, cx, y + 25, {
+      width: cW,
       align: "center",
     });
-    doc.text(CUBISCAN_EMPRESA.horario, cx, y + 48, {
-      width: contentW * 0.34,
-      align: "center",
-    });
+    doc.text(
+      `${CUBISCAN_EMPRESA.web}  ·  ${CUBISCAN_EMPRESA.horario}`,
+      cx,
+      y + 34,
+      { width: cW, align: "center" }
+    );
 
-    // Logintec wordmark
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(12)
-      .fillColor("#c45c26")
-      .text("Logintec", M + contentW - 95, y + 8, { width: 85, align: "right" });
-    doc.fillColor("#000");
+    // Montra + Logintec (derecha, apilados)
+    const rightX = M + contentW - 122;
+    if (!tryImage(doc, montraLogo, rightX + 20, y + 4, [90, 18])) {
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .text("Montra", rightX + 30, y + 6, { width: 90, align: "center" });
+    }
+    if (
+      !tryImage(doc, logintecLogo, rightX, y + 24, [118, 24])
+    ) {
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .text("Logintec", rightX + 20, y + 28, { width: 90, align: "center" });
+    }
 
-    // Left meta fields
+    y += brandH + 3;
+
+    // ——— Meta: ingeniero + caja orden ———
+    const metaH = 52;
+    drawBox(M, y, contentW, metaH);
+
     const leftMetaX = M + 8;
-    fieldLine(leftMetaX, y + 38, "Ingeniero(s):", p.ingenieros, 150);
-    fieldLine(leftMetaX, y + 52, "Hora de llegada:", p.horaLlegada, 150);
-    fieldLine(leftMetaX, y + 66, "Ubicación:", p.ubicacion, 150);
+    fieldLine(leftMetaX, y + 6, "Ingeniero(s):", p.ingenieros, 240);
+    fieldLine(leftMetaX, y + 18, "Hora de llegada:", p.horaLlegada, 240);
+    fieldLine(leftMetaX, y + 30, "Ubicación:", p.ubicacion, 240);
+    fieldLine(leftMetaX, y + 42, "Contacto:", p.contacto, 240);
 
-    // Contacto under ubicación area - squeeze
-    // Actually put Contacto on next visual - form has it under ubicacion
-    // Overwrite - use smaller
-    doc.font("Helvetica").fontSize(7.5);
-    // Contacto was cut - put at bottom left of header
-    fieldLine(leftMetaX + 155, y + 66, "Contacto:", p.contacto, 100);
-
-    // Right order box
-    const boxX = M + contentW * 0.58;
-    const boxW = contentW * 0.4 - 6;
-    const boxY = y + 28;
-    drawBox(boxX, boxY, boxW, 46);
-    const rowH = 11.5;
+    const boxX = M + contentW * 0.52;
+    const boxW = contentW * 0.48 - 6;
+    const boxY = y + 4;
+    drawBox(boxX, boxY, boxW, 44);
+    const rowH = 11;
     const rows: [string, string][] = [
       ["No. de Orden:", p.nroOrden],
       ["Fecha:", formatFechaAr(p.fecha)],
@@ -211,7 +296,7 @@ export function buildCubiscanOrdenPdf(opts: {
       }
     });
 
-    y += headerH + 4;
+    y += metaH + 4;
 
     // ——— Detalle ———
     y = sectionBar(y, "Detalle del servicio realizado");
@@ -246,8 +331,8 @@ export function buildCubiscanOrdenPdf(opts: {
       ["limpieza", "calibracion"].includes(s.id)
     );
     const colW = (contentW - 10) / 2;
-    const leftX = M;
-    const rightX = M + colW + 10;
+    const checkLeftX = M;
+    const checkRightX = M + colW + 10;
     const checkStartY = y;
 
     const drawSections = (
@@ -298,8 +383,8 @@ export function buildCubiscanOrdenPdf(opts: {
       return cy;
     };
 
-    const leftEnd = drawSections(leftSecs, leftX, checkStartY);
-    const rightEnd = drawSections(rightSecs, rightX, checkStartY);
+    const leftEnd = drawSections(leftSecs, checkLeftX, checkStartY);
+    const rightEnd = drawSections(rightSecs, checkRightX, checkStartY);
     y = Math.max(leftEnd, rightEnd) + 2;
 
     // ——— Comentarios ———
