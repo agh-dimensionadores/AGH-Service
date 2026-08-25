@@ -6,12 +6,13 @@ import {
 } from "@/app/actions";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { prismaPg } from "@/lib/prisma";
-import { getCliente, getClientesMap, clienteLabel } from "@/lib/clientes";
+import { getCliente, clienteLabel } from "@/lib/clientes";
 import {
   Badge,
   Field,
   PageHeader,
   Panel,
+  PrimaryLink,
   SecondaryLink,
   estadoTone,
   inputClass,
@@ -57,27 +58,20 @@ export default async function MantenimientoDetallePage({
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
-  const [item, unidades] = await Promise.all([
-    prismaPg.clienteMantenimiento.findUnique({
-      where: { id },
-      include: { instalacion: { include: { maquina: true } } },
-    }),
-    prismaPg.clienteMaquina.findMany({
-      orderBy: { fechaCreacion: "desc" },
-      include: { maquina: true },
-    }),
-  ]);
+  const item = await prismaPg.clienteMantenimiento.findUnique({
+    where: { id },
+    include: { instalacion: { include: { maquina: true } } },
+  });
 
   if (!item) notFound();
 
-  const [cliente, clientesMap] = await Promise.all([
-    getCliente(item.instalacion.idCliente),
-    getClientesMap(unidades.map((u) => u.idCliente)),
-  ]);
+  const cliente = await getCliente(item.instalacion.idCliente);
 
   const update = updateMantenimiento.bind(null, item.id);
   const cerrar = cerrarMantenimiento.bind(null, item.id);
   const estaCerrado = item.estado === "cerrado";
+  const esCubiscan =
+    (item.instalacion.maquina.marca || "").trim().toLowerCase() === "cubiscan";
 
   return (
     <div>
@@ -113,6 +107,21 @@ export default async function MantenimientoDetallePage({
             Pedido del cliente (no editable)
           </p>
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[var(--ink-muted)]">Equipo</dt>
+              <dd className="mt-0.5 text-sm text-white">
+                <Link
+                  href={`/maquinas/${item.idClienteMaquina}`}
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  {machineName(item.instalacion)}
+                </Link>
+                <span className="text-[var(--ink-muted)]">
+                  {" "}
+                  · Serie {item.instalacion.numeroSerie}
+                </span>
+              </dd>
+            </div>
             <div>
               <dt className="text-xs text-[var(--ink-muted)]">Tipo</dt>
               <dd className="mt-0.5 text-sm text-white">{item.tipo}</dd>
@@ -133,23 +142,6 @@ export default async function MantenimientoDetallePage({
         </div>
 
         <GuardedForm action={update} className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Field label="Equipo *">
-              <select
-                name="maquinaId"
-                required
-                defaultValue={item.idClienteMaquina}
-                className={inputClass}
-              >
-                {unidades.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {machineName(u)} ({u.numeroSerie}) —{" "}
-                    {clienteLabel(clientesMap.get(u.idCliente))}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
           <Field label="Programado (agenda)">
             <input
               name="programado"
@@ -182,8 +174,31 @@ export default async function MantenimientoDetallePage({
           </div>
 
           {estaCerrado ? (
-            <div className="sm:col-span-2 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
-              Cerrado el {formatDate(item.arreglado)}.
+            <div className="sm:col-span-2 space-y-3 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
+              <p>Cerrado el {formatDate(item.arreglado)}.</p>
+              {esCubiscan ? (
+                <div className="flex flex-wrap gap-2">
+                  <PrimaryLink href={`/mantenimientos/${item.id}/planilla-cubiscan`}>
+                    Ver / reenviar planilla CubiScan
+                  </PrimaryLink>
+                  <a
+                    href={`/api/mantenimientos/${item.id}/planilla-cubiscan/pdf`}
+                    className="btn-ghost"
+                  >
+                    Descargar PDF
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          ) : esCubiscan ? (
+            <div className="sm:col-span-2 grid gap-3 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4">
+              <p className="text-sm text-[var(--ink-muted)]">
+                Este equipo es CubiScan: al cerrar tenés que completar la orden
+                de servicio (checklist, firmas y envío al cliente).
+              </p>
+              <PrimaryLink href={`/mantenimientos/${item.id}/planilla-cubiscan`}>
+                Cerrar trabajo (planilla CubiScan)
+              </PrimaryLink>
             </div>
           ) : (
             <div className="sm:col-span-2 grid gap-3 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4 sm:grid-cols-[1fr_auto] sm:items-end">

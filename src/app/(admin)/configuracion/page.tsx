@@ -1,6 +1,7 @@
 import {
   createAdminUsuario,
   resetAdminUsuarioPassword,
+  saveMaquinasFavoritas,
 } from "@/app/actions";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import {
@@ -14,27 +15,41 @@ import {
 import { getSession } from "@/lib/auth";
 import { prismaPg } from "@/lib/prisma";
 import { formatDate } from "@/lib/utils";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConfiguracionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ admin?: string }>;
+  searchParams: Promise<{ admin?: string; favoritos?: string }>;
 }) {
   const session = await getSession();
-  const { admin } = await searchParams;
+  const { admin, favoritos } = await searchParams;
 
-  const admins = await prismaPg.usuario.findMany({
-    where: { rol: "admin" },
-    orderBy: { creadoEn: "asc" },
-    select: {
-      id: true,
-      email: true,
-      nombre: true,
-      creadoEn: true,
-    },
-  });
+  const [admins, catalogo] = await Promise.all([
+    prismaPg.usuario.findMany({
+      where: { rol: "admin" },
+      orderBy: { creadoEn: "asc" },
+      select: {
+        id: true,
+        email: true,
+        nombre: true,
+        creadoEn: true,
+      },
+    }),
+    prismaPg.maquina.findMany({
+      orderBy: [{ marca: "asc" }, { modelo: "asc" }],
+      select: {
+        idmachine: true,
+        marca: true,
+        modelo: true,
+        favorito: true,
+      },
+    }),
+  ]);
+
+  const favoritosCount = catalogo.filter((m) => m.favorito).length;
 
   return (
     <div>
@@ -53,6 +68,62 @@ export default async function ConfiguracionPage({
           Tu contraseña fue actualizada.
         </p>
       ) : null}
+      {favoritos === "ok" ? (
+        <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+          Favoritos del catálogo guardados. Se muestran de base en{" "}
+          <Link href="/maquinas" className="underline">
+            Máquinas
+          </Link>
+          .
+        </p>
+      ) : null}
+
+      <div className="mb-6">
+        <Panel>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div>
+              <h3 className="brand-font text-lg font-semibold text-white">
+                Máquinas favoritas
+              </h3>
+              <p className="mt-1 text-sm text-[var(--ink-muted)]">
+                Modelos que aparecen de base en Máquinas (los que más usás).
+              </p>
+            </div>
+            <Badge>{favoritosCount}</Badge>
+          </div>
+
+          {catalogo.length === 0 ? (
+            <EmptyState
+              title="Sin modelos en el catálogo"
+              description="Primero agregá máquinas en el catálogo."
+            />
+          ) : (
+            <GuardedForm action={saveMaquinasFavoritas}>
+              <ul className="mb-4 max-h-[28rem] space-y-2 overflow-y-auto">
+                {catalogo.map((item) => (
+                  <li key={item.idmachine}>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] px-3 py-2.5 hover:border-[rgba(182,255,59,0.35)]">
+                      <input
+                        type="checkbox"
+                        name="favorito"
+                        value={item.idmachine}
+                        defaultChecked={item.favorito}
+                        className="h-4 w-4 accent-[var(--accent)]"
+                      />
+                      <span className="text-sm text-white">
+                        {item.marca} {item.modelo}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <SubmitButton pendingLabel="Guardando…">
+                Guardar favoritos
+              </SubmitButton>
+            </GuardedForm>
+          )}
+        </Panel>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <Panel>

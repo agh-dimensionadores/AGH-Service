@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  crearPeriodoAlquiler,
   deleteMaquina,
   updateAlquilerFin,
   updateMaquina,
 } from "@/app/actions";
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
+import { DiasRestantesAlquiler } from "@/components/dias-restantes-alquiler";
+import { NumeroSerieConPrefijo } from "@/components/numero-serie-prefijo";
 import { prismaPg } from "@/lib/prisma";
 import {
   listClientes,
   getCliente,
-  getClientesMap,
   clienteLabel,
 } from "@/lib/clientes";
 import { catalogImageUrl } from "@/lib/uploads";
@@ -27,7 +27,6 @@ import {
   estadoTone,
 } from "@/components/ui";
 import {
-  daysBetween,
   formatDate,
   labelEstado,
   machineName,
@@ -39,10 +38,10 @@ export const dynamic = "force-dynamic";
 
 function toDateInput(value?: Date | null) {
   if (!value) return "";
-  const d = value;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  // @db.Date llega como medianoche UTC; usar UTC para no correr el día en AR.
+  const y = value.getUTCFullYear();
+  const m = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -89,12 +88,8 @@ export default async function MaquinaDetallePage({
   if (!unidad) notFound();
 
   const cliente = await getCliente(unidad.idCliente);
-  const alquilerClientesMap = await getClientesMap(
-    unidad.alquileres.map((a) => a.idCliente)
-  );
   const update = updateMaquina.bind(null, unidad.id);
   const remove = deleteMaquina.bind(null, unidad.id);
-  const nuevoAlquiler = crearPeriodoAlquiler.bind(null, unidad.id);
   const esAlquiler = unidad.modalidad === "alquiler";
   const alquilerActivo = unidad.alquileres[0] ?? null;
 
@@ -174,14 +169,10 @@ export default async function MaquinaDetallePage({
                   ))}
                 </select>
               </Field>
-              <Field label="Nro. de serie *">
-                <input
-                  name="numeroSerie"
-                  required
-                  defaultValue={unidad.numeroSerie}
-                  className={inputClass}
-                />
-              </Field>
+              <NumeroSerieConPrefijo
+                modelo={unidad.maquina.modelo}
+                defaultSerie={unidad.numeroSerie}
+              />
               <Field label="Sitio / ubicación">
                 <input
                   name="ubicacion"
@@ -238,7 +229,9 @@ export default async function MaquinaDetallePage({
               </span>
             </p>
           </Panel>
+        </div>
 
+        <div className="space-y-4">
           {esAlquiler && alquilerActivo ? (
             <Panel>
               <h3 className="brand-font mb-1 text-lg font-semibold text-white">
@@ -261,12 +254,9 @@ export default async function MaquinaDetallePage({
                   </p>
                 </div>
                 <Field label="Fin del alquiler *">
-                  <input
-                    name="fechaFin"
-                    type="date"
-                    required
-                    defaultValue={toDateInput(alquilerActivo.fechaFin)}
-                    className={inputClass}
+                  <DiasRestantesAlquiler
+                    key={toDateInput(alquilerActivo.fechaFin)}
+                    defaultFin={toDateInput(alquilerActivo.fechaFin)}
                   />
                 </Field>
                 <div className="sm:col-span-2">
@@ -281,89 +271,6 @@ export default async function MaquinaDetallePage({
                 </div>
                 <div className="sm:col-span-2">
                   <SubmitButton>Actualizar fin / comentario</SubmitButton>
-                </div>
-              </GuardedForm>
-            </Panel>
-          ) : null}
-        </div>
-
-        <div className="space-y-4">
-          {esAlquiler ? (
-            <Panel>
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <h3 className="brand-font text-lg font-semibold text-white">
-                  Historial de alquileres
-                </h3>
-                <Badge>{unidad.alquileres.length}</Badge>
-              </div>
-
-              {unidad.alquileres.length === 0 ? (
-                <p className="mb-4 text-sm text-[var(--ink-muted)]">
-                  Todavía no hay períodos registrados.
-                </p>
-              ) : (
-                <ul className="mb-5 space-y-3">
-                  {unidad.alquileres.map((a, idx) => {
-                    const dias = daysBetween(a.fechaInicio, a.fechaFin);
-                    return (
-                      <li
-                        key={a.id}
-                        className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="font-medium text-white">
-                            {clienteLabel(alquilerClientesMap.get(a.idCliente))}
-                          </p>
-                          {idx === 0 ? <Badge tone="ok">Actual</Badge> : null}
-                        </div>
-                        <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                          {formatDate(a.fechaInicio)} → {formatDate(a.fechaFin)}
-                          {dias != null ? ` · ${dias} día${dias === 1 ? "" : "s"}` : ""}
-                        </p>
-                        {a.comentario ? (
-                          <p className="mt-2 text-sm text-white">{a.comentario}</p>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-
-              <h4 className="mb-3 font-medium text-white">
-                Registrar otro período
-              </h4>
-              <GuardedForm
-                action={nuevoAlquiler}
-                className="grid gap-3 sm:grid-cols-2"
-              >
-                <Field label="Inicio *">
-                  <input
-                    name="fechaInicio"
-                    type="date"
-                    required
-                    className={inputClass}
-                    defaultValue={new Date().toISOString().slice(0, 10)}
-                  />
-                </Field>
-                <Field label="Fin *">
-                  <input
-                    name="fechaFin"
-                    type="date"
-                    required
-                    className={inputClass}
-                  />
-                </Field>
-                <div className="sm:col-span-2">
-                  <Field label="Comentario">
-                    <textarea
-                      name="comentario"
-                      rows={2}
-                      className={inputClass}
-                    />
-                  </Field>
-                </div>
-                <div className="sm:col-span-2">
-                  <SubmitButton>Agregar período</SubmitButton>
                 </div>
               </GuardedForm>
             </Panel>

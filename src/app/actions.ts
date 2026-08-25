@@ -4,8 +4,17 @@ import { createHash, randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hashPassword, requireAdmin, requireCliente } from "@/lib/auth";
+import {
+  buildCubiscanOrdenHtml,
+  emptyCubiscanPayload,
+  type CubiscanOrdenPayload,
+  type CubiscanRefaccion,
+} from "@/lib/cubiscan-planilla";
+import { mailConfigured, sendMail } from "@/lib/mail";
 import { prismaPg } from "@/lib/prisma";
 import { readUploadedImage } from "@/lib/uploads";
+import { buildNumeroSerie } from "@/lib/utils";
+import type { Prisma } from "@prisma/client-pg";
 
 function str(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -271,6 +280,31 @@ export async function resetAdminUsuarioPassword(formData: FormData) {
   redirect("/configuracion?admin=password");
 }
 
+/** Modelos del catálogo que aparecen de base en /maquinas. */
+export async function saveMaquinasFavoritas(formData: FormData) {
+  await requireAdmin();
+
+  const ids = formData
+    .getAll("favorito")
+    .map((v) => Number(v))
+    .filter((n) => Number.isInteger(n) && n > 0);
+
+  await prismaPg.$transaction([
+    prismaPg.maquina.updateMany({ data: { favorito: false } }),
+    ...(ids.length
+      ? [
+          prismaPg.maquina.updateMany({
+            where: { idmachine: { in: ids } },
+            data: { favorito: true },
+          }),
+        ]
+      : []),
+  ]);
+
+  touch("/configuracion", "/maquinas");
+  redirect("/configuracion?favoritos=ok");
+}
+
 /** Cliente portal: solicitar mantenimiento / arreglo */
 export async function solicitarMantenimientoCliente(formData: FormData) {
   const session = await requireCliente();
@@ -391,8 +425,16 @@ export async function deleteCatalogoMaquina(id: number) {
 export async function asignarMaquina(formData: FormData) {
   const idCliente = requiredInt(formData, "clienteId");
   const idMaquina = requiredInt(formData, "catalogoId");
-  const numeroSerie = str(formData, "numeroSerie");
-  if (!numeroSerie) throw new Error("El nro. de serie es obligatorio");
+  const digitos =
+    str(formData, "numeroSerieDigitos") || str(formData, "numeroSerie");
+
+  const catalogo = await prismaPg.maquina.findUnique({
+    where: { idmachine: idMaquina },
+    select: { modelo: true },
+  });
+  if (!catalogo) throw new Error("Modelo de catálogo no encontrado");
+
+  const numeroSerie = buildNumeroSerie(catalogo.modelo, digitos);
 
   const modalidadRaw = str(formData, "modalidad") || "venta";
   const modalidad = modalidadRaw === "alquiler" ? "alquiler" : "venta";
@@ -455,8 +497,15 @@ export async function updateMaquina(id: number, formData: FormData) {
 
   const idCliente = requiredInt(formData, "clienteId");
   const idMaquina = requiredInt(formData, "catalogoId");
-  const numeroSerie = str(formData, "numeroSerie");
-  if (!numeroSerie) throw new Error("El nro. de serie es obligatorio");
+  const digitos =
+    str(formData, "numeroSerieDigitos") || str(formData, "numeroSerie");
+
+  const catalogo = await prismaPg.maquina.findUnique({
+    where: { idmachine: idMaquina },
+    select: { modelo: true },
+  });
+  if (!catalogo) throw new Error("Modelo de catálogo no encontrado");
+  const numeroSerie = buildNumeroSerie(catalogo.modelo, digitos);
 
   await prismaPg.clienteMaquina.update({
     where: { id },
@@ -580,17 +629,16 @@ export async function updateMantenimiento(id: number, formData: FormData) {
       solicitado: true,
       estado: true,
       arreglado: true,
+      idClienteMaquina: true,
     },
   });
   if (!existing) throw new Error("Mantenimiento no encontrado");
 
-  const idClienteMaquina = requiredInt(formData, "maquinaId");
-
   await prismaPg.clienteMantenimiento.update({
     where: { id },
     data: {
-      idClienteMaquina,
-      // Lo que pidió el cliente no se edita desde acá
+      // Equipo / pedido del cliente: no se puede cambiar
+      idClienteMaquina: existing.idClienteMaquina,
       tipo: existing.tipo,
       descripcion: existing.descripcion,
       solicitado: existing.solicitado,
@@ -605,7 +653,7 @@ export async function updateMantenimiento(id: number, formData: FormData) {
 
   touch(
     `/mantenimientos/${id}`,
-    `/maquinas/${idClienteMaquina}`,
+    `/maquinas/${existing.idClienteMaquina}`,
     "/mantenimientos",
     "/calendario"
   );
@@ -653,6 +701,264 @@ export async function cerrarMantenimiento(id: number, formData: FormData) {
     "/calendario"
   );
   redirect(`/mantenimientos/${id}?cerrado=1`);
+}
+
+function parseCubiscanPayload(formData: FormData): CubiscanOrdenPayload {
+  const checks: Record<string, string | boolean> = {};
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("check_") || typeof value !== "string") continue;
+    const checkId = key.slice("check_".length);
+    if (value === "true" || value === "on") checks[checkId] = true;
+    else if (value === "si" || value === "no") checks[checkId] = value;
+    else if (value) checks[checkId] = value;
+  }
+
+  const partes = formData.getAll("ref_parte").map((v) => String(v));
+  const cantidades = formData.getAll("ref_cantidad").map((v) => String(v));
+  const numeros = formData.getAll("ref_numero").map((v) => String(v));
+  const descripciones = formData.getAll("ref_descripcion").map((v) => String(v));
+  const estados = formData.getAll("ref_estado").map((v) => String(v));
+  const refacciones: CubiscanRefaccion[] = partes.map((parte, i) => {
+    const est = (estados[i] ?? "").trim();
+    return {
+      parte: parte.trim(),
+      cantidad: (cantidades[i] ?? "").trim(),
+      numeroParte: (numeros[i] ?? "").trim(),
+      descripcion: (descripciones[i] ?? "").trim(),
+      estado:
+        est === "reemplazada" || est === "nueva" ? est : "",
+    };
+  });
+
+  const fallo = str(formData, "falloResuelto");
+  const velocidad = str(formData, "velocidadServicio");
+  const trato = str(formData, "tratoIngeniero");
+  const instalacion = str(formData, "instalacion");
+  const mantTipo = str(formData, "mantenimientoTipo");
+
+  return emptyCubiscanPayload({
+    modelo: str(formData, "modelo"),
+    ingenieros: str(formData, "ingenieros"),
+    horaLlegada: str(formData, "horaLlegada"),
+    ubicacion: str(formData, "ubicacion"),
+    contacto: str(formData, "contacto"),
+    nroOrden: str(formData, "nroOrden"),
+    fecha: str(formData, "fecha"),
+    cliente: str(formData, "cliente"),
+    numeroSerie: str(formData, "numeroSerie"),
+    embalaje: formData.get("embalaje") === "on" || formData.get("embalaje") === "true",
+    instalacion:
+      instalacion === "venta" || instalacion === "renta" ? instalacion : "",
+    mantenimientoTipo:
+      mantTipo === "preventivo" || mantTipo === "correctivo" ? mantTipo : "",
+    checks,
+    comentarios: str(formData, "comentarios"),
+    cuboCalibracion:
+      formData.get("cuboCalibracion") === "on" ||
+      formData.get("cuboCalibracion") === "true",
+    nroMasa: str(formData, "nroMasa"),
+    refacciones,
+    falloResuelto:
+      fallo === "si" || fallo === "no" || fallo === "en_proceso" ? fallo : "",
+    velocidadServicio:
+      velocidad === "rapido" || velocidad === "normal" || velocidad === "lento"
+        ? velocidad
+        : "",
+    tratoIngeniero:
+      trato === "amable" || trato === "descortes" ? trato : "",
+    tiempoReparacion: str(formData, "tiempoReparacion"),
+    fechaCalificacion: str(formData, "fechaCalificacion"),
+    horarioCalificacion: str(formData, "horarioCalificacion"),
+    sugerencias: str(formData, "sugerencias"),
+    representanteCliente: str(formData, "representanteCliente"),
+    representanteCubiscan: str(formData, "representanteCubiscan"),
+  });
+}
+
+/** Cierra mantenimiento CubiScan con planilla, firmas y mail al cliente. */
+export async function cerrarConPlanillaCubiscan(
+  id: number,
+  formData: FormData
+) {
+  await requireAdmin();
+
+  const item = await prismaPg.clienteMantenimiento.findUnique({
+    where: { id },
+    include: {
+      instalacion: { include: { maquina: true } },
+      ordenCubiscan: true,
+    },
+  });
+  if (!item) throw new Error("Mantenimiento no encontrado");
+
+  const marca = (item.instalacion.maquina.marca || "").trim().toLowerCase();
+  if (marca !== "cubiscan") {
+    throw new Error("Esta planilla solo aplica a equipos CubiScan");
+  }
+  if (item.estado === "cerrado" && item.ordenCubiscan) {
+    redirect(`/mantenimientos/${id}/planilla-cubiscan`);
+  }
+
+  const payload = parseCubiscanPayload(formData);
+  if (!payload.modelo || !payload.ingenieros || !payload.cliente || !payload.numeroSerie) {
+    throw new Error("Completá modelo, ingeniero(s), cliente y nro. de serie");
+  }
+
+  const firmaIngeniero = str(formData, "firmaIngeniero");
+  const firmaCliente = str(formData, "firmaCliente");
+  if (!firmaIngeniero.startsWith("data:image/") || !firmaCliente.startsWith("data:image/")) {
+    throw new Error("Se requieren ambas firmas digitales");
+  }
+
+  const emailDestino = str(formData, "emailDestino").toLowerCase();
+  if (!emailDestino.includes("@")) {
+    throw new Error("Ingresá un email de cliente válido");
+  }
+
+  const arreglado = payload.fecha
+    ? new Date(`${payload.fecha}T12:00:00`)
+    : new Date();
+
+  const html = buildCubiscanOrdenHtml({
+    payload,
+    firmaIngeniero,
+    firmaCliente,
+  });
+
+  let emailEnviadoEn: Date | null = null;
+  let emailError: string | null = null;
+
+  if (mailConfigured()) {
+    try {
+      await sendMail({
+        to: emailDestino,
+        subject: `Orden de Servicio CubiScan · ${payload.modelo} · ${payload.numeroSerie}`,
+        html,
+        attachments: [
+          {
+            filename: `orden-cubiscan-${id}.html`,
+            content: html,
+            contentType: "text/html; charset=utf-8",
+          },
+        ],
+      });
+      emailEnviadoEn = new Date();
+    } catch (err) {
+      emailError =
+        err instanceof Error ? err.message : "No se pudo enviar el correo";
+    }
+  } else {
+    emailError =
+      "SMTP no configurado (SMTP_HOST / SMTP_USER / SMTP_PASS / SMTP_FROM). La planilla se guardó igual.";
+  }
+
+  await prismaPg.$transaction([
+    prismaPg.clienteMantenimiento.update({
+      where: { id },
+      data: {
+        estado: "cerrado",
+        arreglado,
+        comentarioArreglo:
+          payload.comentarios ||
+          item.comentarioArreglo ||
+          "Cerrado con planilla CubiScan",
+        asignadoA: payload.ingenieros || item.asignadoA,
+      },
+    }),
+    prismaPg.cubiscanOrdenServicio.upsert({
+      where: { idMantenimiento: id },
+      create: {
+        idMantenimiento: id,
+        payload: payload as unknown as Prisma.InputJsonValue,
+        firmaIngeniero,
+        firmaCliente,
+        emailDestino,
+        emailEnviadoEn,
+        emailError,
+      },
+      update: {
+        payload: payload as unknown as Prisma.InputJsonValue,
+        firmaIngeniero,
+        firmaCliente,
+        emailDestino,
+        emailEnviadoEn,
+        emailError,
+      },
+    }),
+  ]);
+
+  touch(
+    `/mantenimientos/${id}`,
+    `/mantenimientos/${id}/planilla-cubiscan`,
+    `/maquinas/${item.idClienteMaquina}`,
+    "/mantenimientos",
+    "/calendario"
+  );
+
+  const q = emailEnviadoEn
+    ? "enviado=1"
+    : `guardado=1&mail=${encodeURIComponent(emailError || "error")}`;
+  redirect(`/mantenimientos/${id}/planilla-cubiscan?${q}`);
+}
+
+/** Reenvía la orden CubiScan ya guardada. */
+export async function reenviarPlanillaCubiscan(
+  id: number,
+  formData: FormData
+) {
+  await requireAdmin();
+  const orden = await prismaPg.cubiscanOrdenServicio.findUnique({
+    where: { idMantenimiento: id },
+  });
+  if (!orden) throw new Error("No hay planilla CubiScan para este trabajo");
+
+  const emailDestino =
+    str(formData, "emailDestino").toLowerCase() ||
+    orden.emailDestino ||
+    "";
+  if (!emailDestino.includes("@")) {
+    throw new Error("Ingresá un email válido");
+  }
+
+  const payload = emptyCubiscanPayload(
+    orden.payload as unknown as Partial<CubiscanOrdenPayload>
+  );
+  const html = buildCubiscanOrdenHtml({
+    payload,
+    firmaIngeniero: orden.firmaIngeniero,
+    firmaCliente: orden.firmaCliente,
+  });
+
+  if (!mailConfigured()) {
+    throw new Error(
+      "SMTP no configurado. Definí SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS y SMTP_FROM en .env"
+    );
+  }
+
+  await sendMail({
+    to: emailDestino,
+    subject: `Orden de Servicio CubiScan · ${payload.modelo} · ${payload.numeroSerie}`,
+    html,
+    attachments: [
+      {
+        filename: `orden-cubiscan-${id}.html`,
+        content: html,
+        contentType: "text/html; charset=utf-8",
+      },
+    ],
+  });
+
+  await prismaPg.cubiscanOrdenServicio.update({
+    where: { id: orden.id },
+    data: {
+      emailDestino,
+      emailEnviadoEn: new Date(),
+      emailError: null,
+    },
+  });
+
+  touch(`/mantenimientos/${id}/planilla-cubiscan`);
+  redirect(`/mantenimientos/${id}/planilla-cubiscan?enviado=1`);
 }
 
 export async function deleteMantenimiento(_id: number) {

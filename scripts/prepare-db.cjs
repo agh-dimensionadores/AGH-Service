@@ -65,6 +65,24 @@ async function ensureTables() {
     CREATE INDEX IF NOT EXISTS maquinas_alquileres_cliente_idx
       ON maquinas_alquileres (id_cliente)
   `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE maquinas
+      ADD COLUMN IF NOT EXISTS favorito BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS cubiscan_ordenes_servicio (
+      id SERIAL PRIMARY KEY,
+      id_mantenimiento INTEGER NOT NULL UNIQUE
+        REFERENCES clientes_mantenimientos(id) ON DELETE CASCADE,
+      payload JSONB NOT NULL,
+      firma_ingeniero TEXT,
+      firma_cliente TEXT,
+      email_destino VARCHAR(200),
+      email_enviado_en TIMESTAMPTZ,
+      email_error TEXT,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 }
 
 async function seedIfNeeded() {

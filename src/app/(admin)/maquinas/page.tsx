@@ -19,8 +19,31 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function MaquinasPage() {
-  const [catalogo, unidades] = await Promise.all([
+const MARCAS = ["AGH", "CUBISCAN", "Conlida"] as const;
+
+function normalizeMarca(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function chipClass(active: boolean) {
+  return active
+    ? "rounded-lg border border-[var(--accent)] bg-[rgba(182,255,59,0.12)] px-3 py-1.5 text-sm font-medium text-[var(--accent)]"
+    : "rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--ink-muted)] hover:border-[rgba(182,255,59,0.35)] hover:text-white";
+}
+
+export default async function MaquinasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ marca?: string; vista?: string }>;
+}) {
+  const { marca: marcaParam, vista: vistaParam } = await searchParams;
+  const marcaActiva = MARCAS.find(
+    (m) => normalizeMarca(m) === normalizeMarca(marcaParam ?? "")
+  );
+  const verTodas = vistaParam === "todas" || Boolean(marcaActiva);
+  const verFavoritas = !verTodas;
+
+  const [catalogoAll, unidadesAll] = await Promise.all([
     prismaPg.maquina.findMany({
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
       select: {
@@ -29,6 +52,7 @@ export default async function MaquinasPage() {
         modelo: true,
         imagenMime: true,
         imagenUpdatedAt: true,
+        favorito: true,
         _count: { select: { instalaciones: true } },
       },
     }),
@@ -42,6 +66,7 @@ export default async function MaquinasPage() {
             modelo: true,
             imagenMime: true,
             imagenUpdatedAt: true,
+            favorito: true,
           },
         },
         mantenimientos: { select: { estado: true } },
@@ -50,13 +75,30 @@ export default async function MaquinasPage() {
     }),
   ]);
 
+  const hayFavoritos = catalogoAll.some((item) => item.favorito);
+
+  let catalogo = catalogoAll;
+  let unidades = unidadesAll;
+
+  if (marcaActiva) {
+    catalogo = catalogoAll.filter(
+      (item) => normalizeMarca(item.marca) === normalizeMarca(marcaActiva)
+    );
+    unidades = unidadesAll.filter(
+      (u) => normalizeMarca(u.maquina.marca) === normalizeMarca(marcaActiva)
+    );
+  } else if (verFavoritas && hayFavoritos) {
+    catalogo = catalogoAll.filter((item) => item.favorito);
+    const favIds = new Set(catalogo.map((c) => c.idmachine));
+    unidades = unidadesAll.filter((u) => favIds.has(u.idMaquina));
+  }
+
   const clientesMap = await getClientesMap(unidades.map((u) => u.idCliente));
 
   return (
     <div>
       <PageHeader
         title="Máquinas"
-        description="Catálogo en PostgreSQL (tabla maquinas) y unidades asignadas (clientes_maquinas)."
         action={
           <div className="flex flex-wrap gap-2">
             <PrimaryLink href="/maquinas/nueva">Agregar máquina</PrimaryLink>
@@ -64,6 +106,41 @@ export default async function MaquinasPage() {
           </div>
         }
       />
+
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-[var(--ink-muted)]">
+          Ver
+        </span>
+        <Link href="/maquinas" className={chipClass(verFavoritas)}>
+          Favoritas
+        </Link>
+        <Link href="/maquinas?vista=todas" className={chipClass(vistaParam === "todas")}>
+          Todas
+        </Link>
+        <span className="mx-1 text-[var(--ink-muted)]">·</span>
+        <span className="text-sm font-medium text-[var(--ink-muted)]">
+          Marca
+        </span>
+        {MARCAS.map((marca) => (
+          <Link
+            key={marca}
+            href={`/maquinas?marca=${encodeURIComponent(marca)}`}
+            className={chipClass(marcaActiva === marca)}
+          >
+            {marca}
+          </Link>
+        ))}
+      </div>
+
+      {verFavoritas && !hayFavoritos ? (
+        <p className="mb-4 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
+          Todavía no marcaste favoritos. Se muestran todas. Elegilas en{" "}
+          <Link href="/configuracion" className="text-[var(--accent)] hover:underline">
+            Configuración
+          </Link>
+          .
+        </p>
+      ) : null}
 
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -77,9 +154,27 @@ export default async function MaquinasPage() {
 
         {catalogo.length === 0 ? (
           <EmptyState
-            title="Sin modelos en el catálogo"
-            description="Primero agregá una máquina con marca y modelo."
-            action={<PrimaryLink href="/maquinas/nueva">Agregar máquina</PrimaryLink>}
+            title={
+              marcaActiva
+                ? `Sin modelos ${marcaActiva}`
+                : verFavoritas
+                  ? "Sin favoritos"
+                  : "Sin modelos en el catálogo"
+            }
+            description={
+              marcaActiva
+                ? "No hay máquinas de esta marca en el catálogo."
+                : verFavoritas
+                  ? "Marcá los modelos que más usás en Configuración."
+                  : "Primero agregá una máquina con marca y modelo."
+            }
+            action={
+              verFavoritas && !marcaActiva ? (
+                <PrimaryLink href="/configuracion">Ir a Configuración</PrimaryLink>
+              ) : (
+                <PrimaryLink href="/maquinas/nueva">Agregar máquina</PrimaryLink>
+              )
+            }
           />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -131,8 +226,18 @@ export default async function MaquinasPage() {
 
         {unidades.length === 0 ? (
           <EmptyState
-            title="Nadie tiene equipos asignados"
-            description="Elegí un modelo del catálogo y asignalo a un cliente con nro. de serie y sitio."
+            title={
+              marcaActiva
+                ? `Sin equipos ${marcaActiva} asignados`
+                : verFavoritas && hayFavoritos
+                  ? "Sin equipos de favoritos asignados"
+                  : "Nadie tiene equipos asignados"
+            }
+            description={
+              marcaActiva
+                ? "No hay unidades de esta marca asignadas a clientes."
+                : "Elegí un modelo del catálogo y asignalo a un cliente con nro. de serie y sitio."
+            }
             action={<PrimaryLink href="/maquinas/asignar">Asignar</PrimaryLink>}
           />
         ) : (

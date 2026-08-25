@@ -31,6 +31,8 @@ model Maquina {
   imagen          Bytes?
   imagenMime      String?          @map("imagen_mime") @db.VarChar(50)
   imagenUpdatedAt DateTime?        @map("imagen_updated_at") @db.Timestamptz(6)
+  /// Aparece de base en /maquinas (los modelos más usados)
+  favorito        Boolean          @default(false)
   instalaciones   ClienteMaquina[]
 
   @@map("maquinas")
@@ -87,8 +89,26 @@ model ClienteMantenimiento {
   /// Comentario interno de AGH al cerrar / resolver
   comentarioArreglo String?        @map("comentario_arreglo")
   instalacion       ClienteMaquina @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
+  ordenCubiscan     CubiscanOrdenServicio?
 
   @@map("clientes_mantenimientos")
+}
+
+/// Planilla de Orden de Servicio CubiScan (al cerrar mantenimiento).
+model CubiscanOrdenServicio {
+  id               Int      @id @default(autoincrement())
+  idMantenimiento  Int      @unique @map("id_mantenimiento")
+  /// Campos de la planilla (checklist, cabecera, refacciones, encuesta)
+  payload          Json
+  firmaIngeniero   String?  @map("firma_ingeniero")
+  firmaCliente     String?  @map("firma_cliente")
+  emailDestino     String?  @map("email_destino") @db.VarChar(200)
+  emailEnviadoEn   DateTime? @map("email_enviado_en") @db.Timestamptz(6)
+  emailError       String?  @map("email_error")
+  creadoEn         DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  mantenimiento    ClienteMantenimiento @relation(fields: [idMantenimiento], references: [id], onDelete: Cascade)
+
+  @@map("cubiscan_ordenes_servicio")
 }
 
 /// Login de AGH Service. No confundir con cloud_users (Voxel Cloud).
