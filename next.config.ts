@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     "@prisma/client-pg",
     "pdfkit",
     "fontkit",
+    "nodemailer",
   ],
   experimental: {
     serverActions: {
