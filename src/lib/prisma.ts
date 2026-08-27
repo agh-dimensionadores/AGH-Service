@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client-pg";
 
 /** Subir esto si regenerás el client PG y el hot-reload reusa una instancia vieja. */
-const PG_CLIENT_VERSION = "agh-usuarios-v2";
+const PG_CLIENT_VERSION = "cubiscan-orden-v1";
 
 const globalForPrisma = globalThis as unknown as {
   prismaPg?: PrismaClient;

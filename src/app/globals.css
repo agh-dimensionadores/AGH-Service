@@ -19,8 +19,8 @@
   --danger: #ff5c5c;
   --danger-dim: rgba(255, 92, 92, 0.14);
   --ok: #b6ff3b;
-  --font-display: "Space Grotesk", system-ui, sans-serif;
-  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-display: "Segoe UI Semibold", "Trebuchet MS", "Avenir Next", system-ui, sans-serif;
+  --font-body: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
 }
 
 * {

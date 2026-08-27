@@ -42,6 +42,47 @@ async function ensureTables() {
     ON agh_usuarios (cliente_id)
   `);
   await db.$executeRawUnsafe(`DROP TABLE IF EXISTS agh_soporte`);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_maquinas
+      ADD COLUMN IF NOT EXISTS modalidad VARCHAR(20) NOT NULL DEFAULT 'venta'
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS maquinas_alquileres (
+      id SERIAL PRIMARY KEY,
+      id_cliente_maquina INTEGER NOT NULL REFERENCES clientes_maquinas(id) ON DELETE CASCADE,
+      id_cliente INTEGER NOT NULL,
+      fecha_inicio DATE NOT NULL,
+      fecha_fin DATE NOT NULL,
+      comentario TEXT,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS maquinas_alquileres_unidad_idx
+      ON maquinas_alquileres (id_cliente_maquina)
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS maquinas_alquileres_cliente_idx
+      ON maquinas_alquileres (id_cliente)
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE maquinas
+      ADD COLUMN IF NOT EXISTS favorito BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS cubiscan_ordenes_servicio (
+      id SERIAL PRIMARY KEY,
+      id_mantenimiento INTEGER NOT NULL UNIQUE
+        REFERENCES clientes_mantenimientos(id) ON DELETE CASCADE,
+      payload JSONB NOT NULL,
+      firma_ingeniero TEXT,
+      firma_cliente TEXT,
+      email_destino VARCHAR(200),
+      email_enviado_en TIMESTAMPTZ,
+      email_error TEXT,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 }
 
 async function seedIfNeeded() {

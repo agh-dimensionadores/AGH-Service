@@ -34,8 +34,8 @@ export default function NuevoClientePage() {
             </select>
           </Field>
           <div className="sm:col-span-2 text-sm text-[var(--ink-muted)]">
-            El <strong>token</strong> y el <strong>cliente_id</strong> se
-            generan automáticamente al guardar.
+            El <strong>ID</strong> y el <strong>token</strong> se generan
+            automáticamente al guardar.
           </div>
           <div className="sm:col-span-2">
             <SubmitButton>Guardar cliente</SubmitButton>

@@ -28,10 +28,10 @@ export default async function HistorialPage() {
         description="Expediente cronológico desde clientes_mantenimientos."
       />
       <div className="card p-5">
-        <ol className="relative space-y-0 border-l border-[var(--line)] pl-5">
+        <ol className="relative space-y-0 border-l border-[var(--line)] pl-6">
           {actividad.map((item) => (
             <li key={item.id} className="relative pb-5 last:pb-0">
-              <span className="absolute -left-[1.4rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
+              <span className="absolute -left-[1.45rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Link
                   href={`/mantenimientos/${item.id}`}

@@ -1,19 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deleteMantenimiento, updateMantenimiento } from "@/app/actions";
-import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
-import { prismaPg } from "@/lib/prisma";
-import { getCliente, getClientesMap, clienteLabel } from "@/lib/clientes";
 import {
+  cerrarMantenimiento,
+  updateMantenimiento,
+} from "@/app/actions";
+import { GuardedForm, SubmitButton } from "@/components/form";
+import { prismaPg } from "@/lib/prisma";
+import { getCliente, clienteLabel } from "@/lib/clientes";
+import {
+  Badge,
   Field,
   PageHeader,
   Panel,
+  PrimaryLink,
   SecondaryLink,
+  estadoTone,
   inputClass,
 } from "@/components/ui";
 import {
-  ESTADOS_MANTENIMIENTO,
-  TIPOS_MANTENIMIENTO,
+  formatDate,
   labelEstado,
   machineName,
   mantenimientoTitulo,
@@ -43,33 +48,30 @@ function toDateTimeLocal(value?: Date | null) {
 
 export default async function MantenimientoDetallePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ cerrado?: string }>;
 }) {
   const { id: idParam } = await params;
+  const { cerrado } = await searchParams;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
-  const [item, unidades] = await Promise.all([
-    prismaPg.clienteMantenimiento.findUnique({
-      where: { id },
-      include: { instalacion: { include: { maquina: true } } },
-    }),
-    prismaPg.clienteMaquina.findMany({
-      orderBy: { fechaCreacion: "desc" },
-      include: { maquina: true },
-    }),
-  ]);
+  const item = await prismaPg.clienteMantenimiento.findUnique({
+    where: { id },
+    include: { instalacion: { include: { maquina: true } } },
+  });
 
   if (!item) notFound();
 
-  const [cliente, clientesMap] = await Promise.all([
-    getCliente(item.instalacion.idCliente),
-    getClientesMap(unidades.map((u) => u.idCliente)),
-  ]);
+  const cliente = await getCliente(item.instalacion.idCliente);
 
   const update = updateMantenimiento.bind(null, item.id);
-  const remove = deleteMantenimiento.bind(null, item.id);
+  const cerrar = cerrarMantenimiento.bind(null, item.id);
+  const estaCerrado = item.estado === "cerrado";
+  const esCubiscan =
+    (item.instalacion.maquina.marca || "").trim().toLowerCase() === "cubiscan";
 
   return (
     <div>
@@ -86,69 +88,60 @@ export default async function MantenimientoDetallePage({
         }
       />
 
+      {cerrado === "1" ? (
+        <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+          Trabajo marcado como cerrado.
+        </p>
+      ) : null}
+
       <Panel className="max-w-2xl">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] px-4 py-3">
+          <p className="text-sm text-[var(--ink-muted)]">Estado actual</p>
+          <Badge tone={estadoTone(item.estado)}>
+            {labelEstado(item.estado)}
+          </Badge>
+        </div>
+
+        <div className="mb-5 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-muted)]">
+            Pedido del cliente (no editable)
+          </p>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[var(--ink-muted)]">Equipo</dt>
+              <dd className="mt-0.5 text-sm text-white">
+                <Link
+                  href={`/maquinas/${item.idClienteMaquina}`}
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  {machineName(item.instalacion)}
+                </Link>
+                <span className="text-[var(--ink-muted)]">
+                  {" "}
+                  · Serie {item.instalacion.numeroSerie}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--ink-muted)]">Tipo</dt>
+              <dd className="mt-0.5 text-sm text-white">{item.tipo}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--ink-muted)]">Solicitado</dt>
+              <dd className="mt-0.5 text-sm text-white">
+                {formatDate(item.solicitado)}
+              </dd>
+            </div>
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[var(--ink-muted)]">Descripción</dt>
+              <dd className="mt-0.5 whitespace-pre-wrap text-sm text-white">
+                {item.descripcion?.trim() || "Sin descripción"}
+              </dd>
+            </div>
+          </dl>
+        </div>
+
         <GuardedForm action={update} className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Field label="Equipo *">
-              <select
-                name="maquinaId"
-                required
-                defaultValue={item.idClienteMaquina}
-                className={inputClass}
-              >
-                {unidades.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {machineName(u)} ({u.numeroSerie}) —{" "}
-                    {clienteLabel(clientesMap.get(u.idCliente))}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <Field label="Tipo *">
-            <select name="tipo" required defaultValue={item.tipo} className={inputClass}>
-              {TIPOS_MANTENIMIENTO.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {tipo}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Estado">
-            <select name="estado" defaultValue={item.estado} className={inputClass}>
-              {ESTADOS_MANTENIMIENTO.map((estado) => (
-                <option key={estado} value={estado}>
-                  {labelEstado(estado)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Descripción">
-              <textarea
-                name="descripcion"
-                rows={5}
-                defaultValue={item.descripcion ?? ""}
-                className={inputClass}
-              />
-            </Field>
-          </div>
-          <Field label="Solicitado">
-            <input
-              name="solicitado"
-              type="date"
-              defaultValue={toDateInput(item.solicitado)}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Arreglado">
-            <input
-              name="arreglado"
-              type="date"
-              defaultValue={toDateInput(item.arreglado)}
-              className={inputClass}
-            />
-          </Field>
           <Field label="Programado (agenda)">
             <input
               name="programado"
@@ -167,9 +160,74 @@ export default async function MantenimientoDetallePage({
               className={inputClass}
             />
           </Field>
+          <div className="sm:col-span-2">
+            <Field label="Comentario del arreglo (AGH)">
+              <textarea
+                name="comentarioArreglo"
+                rows={4}
+                defaultValue={item.comentarioArreglo ?? ""}
+                placeholder="Qué se hizo, repuestos, observaciones internas…"
+                className={inputClass}
+                readOnly={estaCerrado}
+              />
+            </Field>
+          </div>
+
+          {estaCerrado ? (
+            <div className="sm:col-span-2 space-y-3 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
+              <p>Cerrado el {formatDate(item.arreglado)}.</p>
+              {esCubiscan ? (
+                <div className="flex flex-wrap gap-2">
+                  <PrimaryLink href={`/mantenimientos/${item.id}/planilla-cubiscan`}>
+                    Ver / reenviar planilla CubiScan
+                  </PrimaryLink>
+                  <a
+                    href={`/api/mantenimientos/${item.id}/planilla-cubiscan/pdf`}
+                    className="btn-ghost"
+                  >
+                    Descargar PDF
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          ) : esCubiscan ? (
+            <div className="sm:col-span-2 grid gap-3 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4">
+              <p className="text-sm text-[var(--ink-muted)]">
+                Este equipo es CubiScan: al cerrar tenés que completar la orden
+                de servicio (checklist, firmas y envío al cliente).
+              </p>
+              <PrimaryLink href={`/mantenimientos/${item.id}/planilla-cubiscan`}>
+                Cerrar trabajo (planilla CubiScan)
+              </PrimaryLink>
+            </div>
+          ) : (
+            <div className="sm:col-span-2 grid gap-3 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4 sm:grid-cols-[1fr_auto] sm:items-end">
+              <Field label="Fecha de arreglo (al cerrar)">
+                <input
+                  name="arreglado"
+                  type="date"
+                  defaultValue={toDateInput(new Date())}
+                  className={inputClass}
+                />
+              </Field>
+              <button
+                type="submit"
+                formAction={cerrar}
+                className="btn-primary"
+              >
+                Cerrar trabajo
+              </button>
+              <p className="sm:col-span-2 text-xs text-[var(--ink-muted)]">
+                Marca el pedido como realizado. Podés completar el comentario
+                arriba antes de cerrar.
+              </p>
+            </div>
+          )}
+
           <div className="sm:col-span-2 flex flex-wrap gap-2">
-            <SubmitButton>Guardar cambios</SubmitButton>
-            <DangerButton formAction={remove}>Eliminar trabajo</DangerButton>
+            {!estaCerrado ? (
+              <SubmitButton>Guardar cambios</SubmitButton>
+            ) : null}
           </div>
         </GuardedForm>
         <p className="mt-4 text-sm text-[var(--ink-muted)]">

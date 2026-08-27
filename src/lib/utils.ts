@@ -8,6 +8,15 @@ export function formatDate(value?: Date | string | null) {
   }).format(date);
 }
 
+export function daysBetween(start?: Date | string | null, end?: Date | string | null) {
+  if (!start || !end) return null;
+  const a = typeof start === "string" ? new Date(start) : start;
+  const b = typeof end === "string" ? new Date(end) : end;
+  const ms = b.getTime() - a.getTime();
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+}
+
 export function formatDateTime(value?: Date | string | null) {
   if (!value) return "—";
   const date = typeof value === "string" ? new Date(value) : value;
@@ -47,10 +56,18 @@ export function formatMoney(value?: number | null) {
 
 export function daysUntil(value?: Date | string | null) {
   if (!value) return null;
-  const date = typeof value === "string" ? new Date(value) : value;
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  let target: Date;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split("-").map(Number);
+    target = new Date(y, m - 1, d);
+  } else {
+    const date = typeof value === "string" ? new Date(value) : value;
+    target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
   return Math.round((target.getTime() - start.getTime()) / 86400000);
 }
 
@@ -109,6 +126,39 @@ export function machineName(m: {
   const marca = m.maquina?.marca ?? m.marca;
   const modelo = m.maquina?.modelo ?? m.modelo;
   return [marca, modelo].filter(Boolean).join(" ") || "Equipo";
+}
+
+/** Prefijo de serie desde el modelo (PDC, ODC, CLD, PDL…). */
+export function seriePrefixFromModelo(modelo?: string | null) {
+  const raw = (modelo || "").trim().toUpperCase();
+  const match = raw.match(/^[A-Z]+/);
+  return match?.[0] ?? "";
+}
+
+/** Arma PDC0001 a partir del modelo y los dígitos (o serie completa). */
+export function buildNumeroSerie(modelo: string | null | undefined, input: string) {
+  const prefix = seriePrefixFromModelo(modelo);
+  const cleaned = input.trim().toUpperCase().replace(/[\s-]+/g, "");
+  if (!cleaned) throw new Error("El nro. de serie es obligatorio");
+
+  // Sin prefijo de letras en el modelo (p. ej. CubiScan): solo números.
+  if (!prefix) {
+    const digits = cleaned.replace(/\D/g, "");
+    if (!digits) {
+      throw new Error("Ingresá el nro. de serie (solo números)");
+    }
+    return digits;
+  }
+
+  let digits = cleaned;
+  if (cleaned.startsWith(prefix)) {
+    digits = cleaned.slice(prefix.length);
+  }
+  digits = digits.replace(/\D/g, "");
+  if (!digits) {
+    throw new Error("Ingresá los números del nro. de serie");
+  }
+  return `${prefix}${digits}`;
 }
 
 export function mantenimientoTitulo(item: {

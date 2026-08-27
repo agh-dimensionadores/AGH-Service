@@ -88,10 +88,14 @@ export default async function PortalMaquinaPage({
               <dt className="text-[var(--ink-muted)]">Sitio</dt>
               <dd className="text-white">{unidad.sitio || "—"}</dd>
             </div>
-            <div>
+            <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Fecha de compra</dt>
+              <dd className="text-white">{formatDate(unidad.fechaCompra)}</dd>
+            </div>
+            <div>
+              <dt className="text-[var(--ink-muted)]">Fecha de fabricación</dt>
               <dd className="mt-1 text-white">
-                {formatDate(unidad.fechaCompra)}
+                {formatDate(unidad.fechaFabricacion)}
               </dd>
             </div>
           </dl>
@@ -106,10 +110,10 @@ export default async function PortalMaquinaPage({
               Todavía no hay trabajos registrados en esta máquina.
             </p>
           ) : (
-            <ol className="relative space-y-0 border-l border-[var(--line)] pl-5">
+            <ol className="relative space-y-0 border-l border-[var(--line)] pl-6">
               {unidad.mantenimientos.map((item) => (
                 <li key={item.id} className="relative pb-5 last:pb-0">
-                  <span className="absolute -left-[1.4rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
+                  <span className="absolute -left-[1.45rem] top-1.5 h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium text-white">
                       {mantenimientoTitulo(item)}

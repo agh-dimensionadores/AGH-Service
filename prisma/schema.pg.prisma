@@ -31,24 +31,47 @@ model Maquina {
   imagen          Bytes?
   imagenMime      String?          @map("imagen_mime") @db.VarChar(50)
   imagenUpdatedAt DateTime?        @map("imagen_updated_at") @db.Timestamptz(6)
+  /// Aparece de base en /maquinas (los modelos más usados)
+  favorito        Boolean          @default(false)
   instalaciones   ClienteMaquina[]
 
   @@map("maquinas")
 }
 
 model ClienteMaquina {
-  id             Int                     @id @default(autoincrement())
-  idCliente      Int                     @map("id_cliente")
-  idMaquina      Int                     @map("id_maquina")
-  sitio          String?                 @db.VarChar(200)
-  numeroSerie    String                  @unique @map("numero_serie") @db.VarChar(100)
-  fechaCompra    DateTime?               @map("fecha_compra") @db.Date
-  fechaCreacion  DateTime?               @default(now()) @map("fecha_creacion")
-  cliente        Cliente                 @relation(fields: [idCliente], references: [id])
-  maquina        Maquina                 @relation(fields: [idMaquina], references: [idmachine])
-  mantenimientos ClienteMantenimiento[]
+  id               Int                     @id @default(autoincrement())
+  idCliente        Int                     @map("id_cliente")
+  idMaquina        Int                     @map("id_maquina")
+  sitio            String?                 @db.VarChar(200)
+  numeroSerie      String                  @unique @map("numero_serie") @db.VarChar(100)
+  /// venta | alquiler
+  modalidad        String                  @default("venta") @db.VarChar(20)
+  fechaCompra      DateTime?               @map("fecha_compra") @db.Date
+  fechaFabricacion DateTime?               @map("fecha_fabricacion") @db.Date
+  fechaCreacion    DateTime?               @default(now()) @map("fecha_creacion")
+  cliente          Cliente                 @relation(fields: [idCliente], references: [id])
+  maquina          Maquina                 @relation(fields: [idMaquina], references: [idmachine])
+  mantenimientos   ClienteMantenimiento[]
+  alquileres       MaquinaAlquiler[]
 
   @@map("clientes_maquinas")
+}
+
+/// Períodos de alquiler de una unidad instalada.
+model MaquinaAlquiler {
+  id               Int            @id @default(autoincrement())
+  idClienteMaquina Int            @map("id_cliente_maquina")
+  /// Cliente al que se alquiló (snapshot)
+  idCliente        Int            @map("id_cliente")
+  fechaInicio      DateTime       @map("fecha_inicio") @db.Date
+  fechaFin         DateTime       @map("fecha_fin") @db.Date
+  comentario       String?
+  creadoEn         DateTime       @default(now()) @map("creado_en") @db.Timestamptz(6)
+  instalacion      ClienteMaquina @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
+
+  @@index([idClienteMaquina])
+  @@index([idCliente])
+  @@map("maquinas_alquileres")
 }
 
 model ClienteMantenimiento {
@@ -63,9 +86,29 @@ model ClienteMantenimiento {
   programado        DateTime?      @db.Timestamptz(6)
   /// Quién va (texto libre)
   asignadoA         String?        @map("asignado_a") @db.VarChar(150)
+  /// Comentario interno de AGH al cerrar / resolver
+  comentarioArreglo String?        @map("comentario_arreglo")
   instalacion       ClienteMaquina @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
+  ordenCubiscan     CubiscanOrdenServicio?
 
   @@map("clientes_mantenimientos")
+}
+
+/// Planilla de Orden de Servicio CubiScan (al cerrar mantenimiento).
+model CubiscanOrdenServicio {
+  id               Int      @id @default(autoincrement())
+  idMantenimiento  Int      @unique @map("id_mantenimiento")
+  /// Campos de la planilla (checklist, cabecera, refacciones, encuesta)
+  payload          Json
+  firmaIngeniero   String?  @map("firma_ingeniero")
+  firmaCliente     String?  @map("firma_cliente")
+  emailDestino     String?  @map("email_destino") @db.VarChar(200)
+  emailEnviadoEn   DateTime? @map("email_enviado_en") @db.Timestamptz(6)
+  emailError       String?  @map("email_error")
+  creadoEn         DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  mantenimiento    ClienteMantenimiento @relation(fields: [idMantenimiento], references: [id], onDelete: Cascade)
+
+  @@map("cubiscan_ordenes_servicio")
 }
 
 /// Login de AGH Service. No confundir con cloud_users (Voxel Cloud).
