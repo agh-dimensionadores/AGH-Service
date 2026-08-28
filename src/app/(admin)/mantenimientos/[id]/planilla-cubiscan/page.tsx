@@ -18,6 +18,7 @@ import {
 import { getCliente, clienteLabel } from "@/lib/clientes";
 import {
   emptyCubiscanPayload,
+  stripPlanillaBoilerplate,
   type CubiscanOrdenPayload,
 } from "@/lib/cubiscan-planilla";
 import { mailConfigured } from "@/lib/mail";
@@ -88,8 +89,7 @@ export default async function PlanillaCubiscanPage({
       (item.arreglado
         ? item.arreglado.toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10)),
-    comentarios:
-      savedPayload?.comentarios || item.comentarioArreglo || "",
+    comentarios: stripPlanillaBoilerplate(savedPayload?.comentarios),
     representanteCubiscan:
       savedPayload?.representanteCubiscan || item.asignadoA || "",
     nroOrden: savedPayload?.nroOrden || String(item.id),

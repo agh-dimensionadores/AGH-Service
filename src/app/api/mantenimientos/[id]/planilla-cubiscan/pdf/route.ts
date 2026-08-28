@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
   emptyCubiscanPayload,
+  stripPlanillaBoilerplate,
   type CubiscanOrdenPayload,
 } from "@/lib/cubiscan-planilla";
 import { prismaPg } from "@/lib/prisma";
@@ -46,6 +47,7 @@ export async function GET(
     const payload = emptyCubiscanPayload(
       orden.payload as unknown as Partial<CubiscanOrdenPayload>
     );
+    payload.comentarios = stripPlanillaBoilerplate(payload.comentarios);
     const kind =
       planillaKind(
         orden.mantenimiento.instalacion.maquina.marca,

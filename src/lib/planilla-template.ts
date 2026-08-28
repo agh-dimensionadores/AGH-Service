@@ -88,3 +88,9 @@ export function planillaFirmaLabel(kind: PlanillaKind) {
 export function planillaPageTitle(kind: PlanillaKind) {
   return kind === "agh" ? "Planilla AGH Dimensionadores" : "Planilla CubiScan";
 }
+
+export function planillaFalloPregunta(kind: PlanillaKind) {
+  return kind === "agh"
+    ? "¿Resolvió la falla reportada?"
+    : "¿Resolvimos la falla reportada?";
+}

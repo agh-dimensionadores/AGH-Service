@@ -14,6 +14,7 @@ import {
 } from "@/lib/cubiscan-planilla";
 import {
   checkSectionsFor,
+  planillaFalloPregunta,
   planillaFirmaLabel,
   planillaTitulo,
   type PlanillaKind,
@@ -63,6 +64,82 @@ export function CubiscanPlanillaForm({
   const sections = checkSectionsFor(kind);
   const titulo = planillaTitulo(kind);
   const firmaLabel = planillaFirmaLabel(kind);
+  const isAgh = kind === "agh";
+  const leftSections = sections.filter((s) =>
+    ["estructura", "energia", "cargador"].includes(s.id)
+  );
+  const rightSections = sections.filter((s) =>
+    ["limpieza", "calibracion"].includes(s.id)
+  );
+
+  const renderCheckItem = (
+    sectionId: string,
+    item: (typeof sections)[number]["items"][number]
+  ) => {
+    const key = checkKey(sectionId, item.id);
+    const current = defaults.checks[key];
+    if (item.yesNo) {
+      return (
+        <li
+          key={key}
+          className="flex flex-wrap items-center justify-between gap-2 text-sm"
+        >
+          <span className="text-[var(--ink-muted)]">{item.label}</span>
+          <select
+            name={`check_${key}`}
+            defaultValue={
+              current === true || current === "si"
+                ? "si"
+                : current === false || current === "no"
+                  ? "no"
+                  : ""
+            }
+            disabled={readOnly}
+            className={`${inputClass} w-auto min-w-[7rem]`}
+          >
+            <option value="">—</option>
+            <option value="si">Sí</option>
+            <option value="no">No</option>
+          </select>
+        </li>
+      );
+    }
+    return (
+      <li key={key}>
+        <label className="flex cursor-pointer items-center gap-3 text-sm text-white">
+          <input
+            type="checkbox"
+            name={`check_${key}`}
+            value="true"
+            defaultChecked={
+              current === true || current === "true" || current === "on"
+            }
+            disabled={readOnly}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+          {item.label}
+        </label>
+      </li>
+    );
+  };
+
+  const renderSection = (section: (typeof sections)[number]) => (
+    <div
+      key={section.id}
+      className={
+        isAgh
+          ? "space-y-2"
+          : "rounded-xl border border-[var(--line)] p-4"
+      }
+    >
+      <h4 className={`font-medium text-white ${isAgh ? "text-sm" : "mb-3"}`}>
+        {section.title}
+      </h4>
+      <ul className="space-y-2">
+        {section.items.map((item) => renderCheckItem(section.id, item))}
+      </ul>
+    </div>
+  );
 
   return (
     <GuardedForm action={action} className="space-y-6">
@@ -206,73 +283,33 @@ export function CubiscanPlanillaForm({
         </div>
       </section>
 
-      <section>
+      <section className="rounded-xl border border-[var(--line)] p-4">
         <h3 className="brand-font mb-3 text-lg font-semibold text-white">
           Detalle del servicio realizado
         </h3>
-        <div className="space-y-4">
-          {sections.map((section) => (
-            <div
-              key={section.id}
-              className="rounded-xl border border-[var(--line)] p-4"
-            >
-              <h4 className="mb-3 font-medium text-white">{section.title}</h4>
-              <ul className="space-y-2">
-                {section.items.map((item) => {
-                  const key = checkKey(section.id, item.id);
-                  const current = defaults.checks[key];
-                  if (item.yesNo) {
-                    return (
-                      <li
-                        key={key}
-                        className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                      >
-                        <span className="text-[var(--ink-muted)]">
-                          {item.label}
-                        </span>
-                        <select
-                          name={`check_${key}`}
-                          defaultValue={
-                            current === true || current === "si"
-                              ? "si"
-                              : current === false || current === "no"
-                                ? "no"
-                                : ""
-                          }
-                          disabled={readOnly}
-                          className={`${inputClass} w-auto min-w-[7rem]`}
-                        >
-                          <option value="">—</option>
-                          <option value="si">Sí</option>
-                          <option value="no">No</option>
-                        </select>
-                      </li>
-                    );
-                  }
-                  return (
-                    <li key={key}>
-                      <label className="flex cursor-pointer items-center gap-3 text-sm text-white">
-                        <input
-                          type="checkbox"
-                          name={`check_${key}`}
-                          value="true"
-                          defaultChecked={
-                            current === true ||
-                            current === "true" ||
-                            current === "on"
-                          }
-                          disabled={readOnly}
-                          className="h-4 w-4 accent-[var(--accent)]"
-                        />
-                        {item.label}
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </div>
+        {isAgh ? (
+          <div className="space-y-6">
+            {(
+              [
+                [leftSections[0], rightSections[0]],
+                [leftSections[1], rightSections[1]],
+                [leftSections[2], undefined],
+              ] as const
+            ).map(([left, right], idx) => (
+              <div
+                key={idx}
+                className="grid items-start gap-x-6 lg:grid-cols-2"
+              >
+                <div>{left ? renderSection(left) : null}</div>
+                <div>{right ? renderSection(right) : null}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {sections.map((section) => renderSection(section))}
+          </div>
+        )}
       </section>
 
       <Field label="Comentarios / Notas">
@@ -365,7 +402,7 @@ export function CubiscanPlanillaForm({
           Califique nuestro servicio
         </h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="¿Resolvimos la falla reportada?">
+          <Field label={planillaFalloPregunta(kind)}>
             <select
               name="falloResuelto"
               defaultValue={defaults.falloResuelto}

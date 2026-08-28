@@ -120,6 +120,18 @@ export function checkKey(sectionId: string, itemId: string) {
   return `${sectionId}.${itemId}`;
 }
 
+const PLANILLA_BOILERPLATE = new Set([
+  "Cerrado con planilla CubiScan",
+  "Cerrado con planilla AGH Dimensionadores",
+]);
+
+/** Texto interno al cerrar; no debe aparecer en Comentarios/Notas del PDF. */
+export function stripPlanillaBoilerplate(value?: string | null) {
+  const text = (value ?? "").trim();
+  if (!text || PLANILLA_BOILERPLATE.has(text)) return "";
+  return text;
+}
+
 export function emptyCubiscanPayload(
   defaults: Partial<CubiscanOrdenPayload> = {}
 ): CubiscanOrdenPayload {

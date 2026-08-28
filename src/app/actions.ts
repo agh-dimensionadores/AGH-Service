@@ -7,6 +7,7 @@ import { hashPassword, requireAdmin, requireCliente } from "@/lib/auth";
 import {
   buildCubiscanOrdenHtml,
   emptyCubiscanPayload,
+  stripPlanillaBoilerplate,
   type CubiscanOrdenPayload,
   type CubiscanRefaccion,
 } from "@/lib/cubiscan-planilla";
@@ -699,12 +700,7 @@ export async function cerrarMantenimiento(id: number, formData: FormData) {
   }
 
   const comentarioArreglo =
-    optionalStr(formData, "comentarioArreglo") ||
-    (kind === "agh"
-      ? "Cerrado con planilla AGH Dimensionadores"
-      : kind === "cubiscan"
-        ? "Cerrado con planilla CubiScan"
-        : null);
+    stripPlanillaBoilerplate(optionalStr(formData, "comentarioArreglo")) || null;
   const arreglado = optionalDate(formData, "arreglado") ?? new Date();
 
   await prismaPg.clienteMantenimiento.update({
@@ -810,7 +806,7 @@ function parseCubiscanPayload(formData: FormData): CubiscanOrdenPayload {
     mantenimientoTipo:
       mantTipo === "preventivo" || mantTipo === "correctivo" ? mantTipo : "",
     checks,
-    comentarios: str(formData, "comentarios"),
+    comentarios: stripPlanillaBoilerplate(str(formData, "comentarios")),
     refacciones,
     falloResuelto:
       fallo === "si" || fallo === "no" || fallo === "en_proceso" ? fallo : "",
@@ -970,9 +966,9 @@ async function upsertCubiscanOrden(
         estado: "cerrado",
         arreglado,
         comentarioArreglo:
-          payload.comentarios ||
-          item.comentarioArreglo ||
-          "Cerrado con planilla CubiScan",
+          stripPlanillaBoilerplate(payload.comentarios) ||
+          stripPlanillaBoilerplate(item.comentarioArreglo) ||
+          null,
         asignadoA: payload.ingenieros || item.asignadoA,
       },
     }),
@@ -1139,6 +1135,7 @@ export async function reenviarPlanillaCubiscan(
   const payload = emptyCubiscanPayload(
     orden.payload as unknown as Partial<CubiscanOrdenPayload>
   );
+  payload.comentarios = stripPlanillaBoilerplate(payload.comentarios);
   const kind =
     planillaKind(
       orden.mantenimiento.instalacion.maquina.marca,

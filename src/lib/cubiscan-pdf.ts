@@ -79,14 +79,34 @@ function resolveMaquinaImage(modelo: string, kind: PlanillaKind) {
   return maquinaFile(...candidates);
 }
 
+type PdfFontSet = { reg: string; bold: string };
+
+const PDF_FONT_HELVETICA: PdfFontSet = {
+  reg: "Helvetica",
+  bold: "Helvetica-Bold",
+};
+
+function registerAghPdfFonts(doc: PDFKit.PDFDocument): PdfFontSet {
+  const dir = path.join(process.cwd(), "assets", "fonts");
+  const semiBold = path.join(dir, "NunitoSans-SemiBold.woff");
+  const boldFile = path.join(dir, "NunitoSans-Bold.woff");
+  const variable = path.join(dir, "NunitoSans-Variable.ttf");
+  const regularFile = [boldFile, semiBold, variable].find((f) => fs.existsSync(f));
+  if (!regularFile || !fs.existsSync(boldFile)) return PDF_FONT_HELVETICA;
+  doc.registerFont("NunitoSans", regularFile);
+  doc.registerFont("NunitoSans-Bold", boldFile);
+  return { reg: "NunitoSans", bold: "NunitoSans-Bold" };
+}
+
 function drawLines(
   doc: PDFKit.PDFDocument,
   text: string,
   x: number,
   startY: number,
-  lineHeight: number
+  lineHeight: number,
+  fontReg = PDF_FONT_HELVETICA.reg
 ) {
-  doc.font("Helvetica").fontSize(8).fillColor("#000");
+  doc.font(fontReg).fontSize(8).fillColor("#000000");
   let ty = startY;
   for (const line of text.split("\n")) {
     doc.text(line.length ? line : " ", x, ty, {
@@ -123,12 +143,13 @@ function splitTextToHeight(
   doc: PDFKit.PDFDocument,
   text: string,
   width: number,
-  maxHeight: number
+  maxHeight: number,
+  fontReg = PDF_FONT_HELVETICA.reg
 ): { fitted: string; rest: string } {
   const raw = (text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   if (!raw.trim()) return { fitted: "", rest: "" };
 
-  doc.font("Helvetica").fontSize(8);
+  doc.font(fontReg).fontSize(8);
   const lineHeight = Math.max(doc.currentLineHeight(), 10);
   const maxLines = Math.max(1, Math.floor(Math.max(lineHeight, maxHeight) / lineHeight));
 
@@ -220,6 +241,8 @@ export function buildCubiscanOrdenPdf(opts: {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
+    const fonts = isAgh ? registerAghPdfFonts(doc) : PDF_FONT_HELVETICA;
+
     const W = doc.page.width;
     const H = doc.page.height;
     const M = 16;
@@ -235,11 +258,16 @@ export function buildCubiscanOrdenPdf(opts: {
       doc.rect(x, y, w, h).stroke(line);
     };
 
-    const sectionBar = (y: number, title: string) => {
-      drawBox(M, y, contentW, 15, gray);
+    const sectionBar = (
+      y: number,
+      title: string,
+      fill: string = gray,
+      textColor = "#fff"
+    ) => {
+      drawBox(M, y, contentW, 15, fill);
       doc
-        .fillColor("#fff")
-        .font("Helvetica-Bold")
+        .fillColor(textColor)
+        .font(fonts.bold)
         .fontSize(8.5)
         .text(title, M + 6, y + 3.5, { width: contentW - 12 });
       doc.fillColor("#000");
@@ -266,7 +294,7 @@ export function buildCubiscanOrdenPdf(opts: {
       value: string,
       width: number
     ) => {
-      doc.font("Helvetica").fontSize(7.5).fillColor("#000");
+      doc.font(fonts.reg).fontSize(7.5).fillColor("#000");
       const labelW = doc.widthOfString(label);
       doc.text(label, x, y);
       const vx = x + labelW + 3;
@@ -276,12 +304,12 @@ export function buildCubiscanOrdenPdf(opts: {
         .lineTo(vx + vw, y + 9)
         .stroke("#444");
       if (value) {
-        doc.font("Helvetica-Bold").fontSize(8).text(value, vx + 2, y - 1, {
+        doc.font(fonts.bold).fontSize(8).text(value, vx + 2, y - 1, {
           width: vw - 4,
           ellipsis: true,
         });
       }
-      doc.font("Helvetica");
+      doc.font(fonts.reg);
     };
 
     const pageBottom = () => H - M;
@@ -292,14 +320,14 @@ export function buildCubiscanOrdenPdf(opts: {
         drawBox(M, hy, contentW, 18, "#1a1a1a");
         doc
           .fillColor("#fff")
-          .font("Helvetica-Bold")
+          .font(fonts.bold)
           .fontSize(10)
           .text(titulo, M + 6, hy + 4.5, { width: contentW - 12, align: "center" });
         doc.fillColor("#000");
         hy += 18;
         drawBox(M, hy, contentW, 16, lightGray);
         doc
-          .font("Helvetica-Bold")
+          .font(fonts.bold)
           .fontSize(10)
           .text(`Modelo ${p.modelo || "PDC"}`, M, hy + 3.5, {
             width: contentW,
@@ -316,7 +344,7 @@ export function buildCubiscanOrdenPdf(opts: {
         const aghY = hy + (brandH - aghH) / 2;
         if (!tryImage(doc, aghLogo, leftX, aghY, [aghW, aghH], "center")) {
           doc
-            .font("Helvetica-Bold")
+            .font(fonts.bold)
             .fontSize(9)
             .text("AGH\nDIMENSIONADORES", leftX, hy + 32, {
               width: aghW,
@@ -324,21 +352,33 @@ export function buildCubiscanOrdenPdf(opts: {
             });
         }
 
-        const machineSize = 90;
-        const machineX = M + contentW - 1 - machineSize;
-        const machineY = hy + (brandH - machineSize) / 2;
+        const aghCode = aghModeloCode(undefined, p.modelo);
+        const isOdc = aghCode === "ODC";
+        const isAghProduct =
+          aghCode === "ODC" || aghCode === "PDC" || aghCode === "PDL";
+        const productRightShift = 26;
+        const machineRightShift = isOdc ? 10 : isAghProduct ? productRightShift : 0;
+        const machineSize = isAghProduct ? 94 : 90;
+        const logoAnchorX =
+          M + contentW - 1 - machineSize + (isAghProduct ? productRightShift : 0);
+        const machineX = M + contentW - 1 - machineSize + machineRightShift;
+        const machineY =
+          hy + (brandH - machineSize) / 2 + (isAghProduct ? -2 : 0);
 
-        const prodW = 82;
-        const prodH = 30;
-        const prodX = machineX - 6 - prodW;
+        const prodW = isAghProduct ? aghW : 82;
+        const prodH = isAghProduct ? aghH : 30;
+        const prodX = logoAnchorX - 8 - prodW;
         const prodY = hy + (brandH - prodH) / 2;
         if (!tryImage(doc, productLogo, prodX, prodY, [prodW, prodH], "center")) {
-          const code = aghModeloCode(undefined, p.modelo) || "PDC";
+          const code = aghCode || "PDC";
           doc
-            .font("Helvetica-Bold")
-            .fontSize(11)
+            .font(fonts.bold)
+            .fontSize(isAghProduct ? 9 : 11)
             .fillColor("#000")
-            .text(code, prodX, hy + 42, { width: prodW, align: "center" });
+            .text(code, prodX, prodY + (isAghProduct ? prodH / 2 - 8 : 0), {
+              width: prodW,
+              align: "center",
+            });
         }
 
         if (
@@ -348,10 +388,10 @@ export function buildCubiscanOrdenPdf(opts: {
           ])
         ) {
           doc
-            .font("Helvetica")
+            .font(fonts.reg)
             .fontSize(6)
             .fillColor("#888")
-            .text("foto", machineX + 30, hy + 46);
+            .text("foto", machineX + 30, machineY + machineSize / 2 - 3);
           doc.fillColor("#000");
         }
 
@@ -368,14 +408,14 @@ export function buildCubiscanOrdenPdf(opts: {
           )
         ) {
           doc
-            .font("Helvetica-Bold")
+            .font(fonts.bold)
             .fontSize(10)
             .text("Logintec", logiBlockX, hy + 12, {
               width: logiBlockW,
               align: "center",
             });
         }
-        doc.font("Helvetica").fontSize(6.5).fillColor("#000");
+        doc.font(fonts.reg).fontSize(6.5).fillColor("#000");
         doc.text(CUBISCAN_EMPRESA.nombre, logiBlockX, hy + 42, {
           width: logiBlockW,
           align: "center",
@@ -401,7 +441,7 @@ export function buildCubiscanOrdenPdf(opts: {
       drawBox(M, hy, contentW, 26, gray);
       doc
         .fillColor("#fff")
-        .font("Helvetica-Bold")
+        .font(fonts.bold)
         .fontSize(10.5)
         .text(titulo, M + 8, hy + 4, {
           width: contentW * 0.58,
@@ -422,7 +462,7 @@ export function buildCubiscanOrdenPdf(opts: {
       const cubiW = 102;
       const cubiH = 24;
       if (!tryImage(doc, cubiscanLogo, leftX, hy + 8, [cubiW, cubiH])) {
-        doc.font("Helvetica-Bold").fontSize(11).text("CUBISCAN", leftX, hy + 12);
+        doc.font(fonts.bold).fontSize(11).text("CUBISCAN", leftX, hy + 12);
       }
       const montraW = 64;
       const montraH = 20;
@@ -436,7 +476,7 @@ export function buildCubiscanOrdenPdf(opts: {
         )
       ) {
         doc
-          .font("Helvetica-Bold")
+          .font(fonts.bold)
           .fontSize(8)
           .text("Montra", leftX, hy + 42, { width: cubiW });
       }
@@ -451,7 +491,7 @@ export function buildCubiscanOrdenPdf(opts: {
         ])
       ) {
         doc
-          .font("Helvetica")
+          .font(fonts.reg)
           .fontSize(6)
           .fillColor("#888")
           .text("foto", machineX + 20, hy + 42);
@@ -465,7 +505,7 @@ export function buildCubiscanOrdenPdf(opts: {
       const logiY = hy + (brandH - logiH) / 2;
       if (!tryImage(doc, logintecLogo, rightX, logiY, [logiW, logiH])) {
         doc
-          .font("Helvetica-Bold")
+          .font(fonts.bold)
           .fontSize(8)
           .text("Logintec", rightX, logiY + 2, {
             width: logiW,
@@ -474,14 +514,14 @@ export function buildCubiscanOrdenPdf(opts: {
       }
 
       doc
-        .font("Helvetica-Bold")
+        .font(fonts.bold)
         .fontSize(8)
         .fillColor("#000")
         .text(CUBISCAN_EMPRESA.nombre, M, hy + 14, {
           width: contentW,
           align: "center",
         });
-      doc.font("Helvetica").fontSize(6);
+      doc.font(fonts.reg).fontSize(6);
       doc.text(CUBISCAN_EMPRESA.direccion, M, hy + 26, {
         width: contentW,
         align: "center",
@@ -510,130 +550,188 @@ export function buildCubiscanOrdenPdf(opts: {
 
     // ——— Meta: ingeniero + caja orden ———
     const metaH = 52;
-    drawBox(M, y, contentW, metaH);
+    if (isAgh) {
+      const leftMetaX = M + 4;
+      fieldLine(leftMetaX, y + 6, "Ingeniero(s):", p.ingenieros, contentW * 0.48);
+      fieldLine(leftMetaX, y + 18, "Hora de llegada:", p.horaLlegada, contentW * 0.48);
+      fieldLine(leftMetaX, y + 30, "Ubicación:", p.ubicacion, contentW * 0.48);
+      fieldLine(leftMetaX, y + 42, "Contacto:", p.contacto, contentW * 0.48);
 
-    const leftMetaX = M + 8;
-    fieldLine(leftMetaX, y + 6, "Ingeniero(s):", p.ingenieros, 240);
-    fieldLine(leftMetaX, y + 18, "Hora de llegada:", p.horaLlegada, 240);
-    fieldLine(leftMetaX, y + 30, "Ubicación:", p.ubicacion, 240);
-    fieldLine(leftMetaX, y + 42, "Contacto:", p.contacto, 240);
-
-    const boxX = M + contentW * 0.52;
-    const boxW = contentW * 0.48 - 6;
-    const boxY = y + 4;
-    drawBox(boxX, boxY, boxW, 44);
-    const rowH = 11;
-    const rows: [string, string][] = [
-      ["No. de Orden:", p.nroOrden],
-      ["Fecha:", formatFechaAr(p.fecha)],
-      ["Cliente:", p.cliente],
-      ["No. de Serie:", p.numeroSerie],
-    ];
-    rows.forEach(([lab, val], i) => {
-      const ry = boxY + 2 + i * rowH;
-      doc.font("Helvetica").fontSize(7).text(lab, boxX + 3, ry);
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(7.5)
-        .text(val || "", boxX + 72, ry, { width: boxW - 76, ellipsis: true });
-      if (i < rows.length - 1) {
+      const boxX = M + contentW * 0.52;
+      const boxW = contentW * 0.48 - 4;
+      const boxY = y + 4;
+      drawBox(boxX, boxY, boxW, 48);
+      const rowH = 12;
+      const rows: [string, string][] = [
+        ["No. de Orden:", p.nroOrden],
+        ["Fecha:", formatFechaAr(p.fecha)],
+        ["Cliente:", p.cliente],
+        ["No. de Serie:", p.numeroSerie],
+      ];
+      rows.forEach(([lab, val], i) => {
+        const ry = boxY + 2 + i * rowH;
+        doc.font(fonts.reg).fontSize(7.5).text(lab, boxX + 3, ry);
         doc
-          .moveTo(boxX, ry + rowH - 1)
-          .lineTo(boxX + boxW, ry + rowH - 1)
-          .stroke("#aaa");
-      }
-    });
+          .font(fonts.bold)
+          .fontSize(7.5)
+          .text(val || "", boxX + 72, ry, { width: boxW - 76, ellipsis: true });
+        if (i < rows.length - 1) {
+          doc
+            .moveTo(boxX, ry + rowH - 1)
+            .lineTo(boxX + boxW, ry + rowH - 1)
+            .stroke("#aaa");
+        }
+      });
+    } else {
+      drawBox(M, y, contentW, metaH);
+
+      const leftMetaX = M + 8;
+      fieldLine(leftMetaX, y + 6, "Ingeniero(s):", p.ingenieros, 240);
+      fieldLine(leftMetaX, y + 18, "Hora de llegada:", p.horaLlegada, 240);
+      fieldLine(leftMetaX, y + 30, "Ubicación:", p.ubicacion, 240);
+      fieldLine(leftMetaX, y + 42, "Contacto:", p.contacto, 240);
+
+      const boxX = M + contentW * 0.52;
+      const boxW = contentW * 0.48 - 6;
+      const boxY = y + 4;
+      drawBox(boxX, boxY, boxW, 44);
+      const rowH = 11;
+      const rows: [string, string][] = [
+        ["No. de Orden:", p.nroOrden],
+        ["Fecha:", formatFechaAr(p.fecha)],
+        ["Cliente:", p.cliente],
+        ["No. de Serie:", p.numeroSerie],
+      ];
+      rows.forEach(([lab, val], i) => {
+        const ry = boxY + 2 + i * rowH;
+        doc.font(fonts.reg).fontSize(7).text(lab, boxX + 3, ry);
+        doc
+          .font(fonts.bold)
+          .fontSize(7.5)
+          .text(val || "", boxX + 72, ry, { width: boxW - 76, ellipsis: true });
+        if (i < rows.length - 1) {
+          doc
+            .moveTo(boxX, ry + rowH - 1)
+            .lineTo(boxX + boxW, ry + rowH - 1)
+            .stroke("#aaa");
+        }
+      });
+    }
 
     y += metaH + 4;
 
     // ——— Detalle ———
     y = sectionBar(y, "Detalle del servicio realizado");
-    y += 4;
 
-    // Service type row
-    const tipoY = y;
-    checkbox(M + 4, tipoY, p.embalaje);
-    doc.font("Helvetica-Bold").fontSize(7.5).text("EMBALAJE", M + 15, tipoY);
-
-    checkbox(M + 90, tipoY, Boolean(p.instalacion));
-    doc.text("INSTALACION", M + 101, tipoY);
-    checkbox(M + 175, tipoY + 1, p.instalacion === "venta", 7);
-    doc.font("Helvetica").fontSize(7).text("Venta", M + 185, tipoY + 1);
-    checkbox(M + 215, tipoY + 1, p.instalacion === "renta", 7);
-    doc.text("Renta", M + 225, tipoY + 1);
-
-    checkbox(M + 270, tipoY, Boolean(p.mantenimientoTipo));
-    doc.font("Helvetica-Bold").fontSize(7.5).text("MANTENIMIENTO", M + 281, tipoY);
-    checkbox(M + 375, tipoY + 1, p.mantenimientoTipo === "preventivo", 7);
-    doc.font("Helvetica").fontSize(7).text("Preventivo", M + 385, tipoY + 1);
-    checkbox(M + 445, tipoY + 1, p.mantenimientoTipo === "correctivo", 7);
-    doc.text("Correctivo", M + 455, tipoY + 1);
-
-    y += 16;
-
-    // Two-column checklist
     const leftSecs = sections.filter((s) =>
       ["estructura", "energia", "cargador"].includes(s.id)
     );
     const rightSecs = sections.filter((s) =>
       ["limpieza", "calibracion"].includes(s.id)
     );
-    const colW = (contentW - 10) / 2;
-    const checkLeftX = M;
-    const checkRightX = M + colW + 10;
+    const colW = (contentW - (isAgh ? 24 : 10)) / 2;
+    const checkLeftX = isAgh ? M + 8 : M;
+    const checkRightX = isAgh ? M + 8 + colW + 16 : M + colW + 10;
+    const detalleTop = y;
+
+    y += isAgh ? 10 : 4;
+
+    // Service type row
+    const tipoY = y;
+    checkbox(M + 4, tipoY, p.embalaje);
+    doc.font(fonts.bold).fontSize(7.5).text("EMBALAJE", M + 15, tipoY);
+
+    checkbox(M + 88, tipoY, Boolean(p.instalacion));
+    doc.text(isAgh ? "INSTALACIÓN" : "INSTALACION", M + 99, tipoY);
+    checkbox(M + 168, tipoY + 1, p.instalacion === "venta", 7);
+    doc.font(fonts.reg).fontSize(7).text("Venta", M + 178, tipoY + 1);
+    doc.font(fonts.reg).fontSize(7).text("/", M + 206, tipoY + 1);
+    checkbox(M + 214, tipoY + 1, p.instalacion === "renta", 7);
+    doc.text("Renta", M + 224, tipoY + 1);
+
+    checkbox(M + 268, tipoY, Boolean(p.mantenimientoTipo));
+    doc.font(fonts.bold).fontSize(7.5).text("MANTENIMIENTO", M + 279, tipoY);
+    checkbox(M + 368, tipoY + 1, p.mantenimientoTipo === "preventivo", 7);
+    doc.font(fonts.reg).fontSize(7).text("Preventivo", M + 378, tipoY + 1);
+    doc.font(fonts.reg).fontSize(7).text("/", M + 424, tipoY + 1);
+    checkbox(M + 432, tipoY + 1, p.mantenimientoTipo === "correctivo", 7);
+    doc.text("Correctivo", M + 442, tipoY + 1);
+
+    y += isAgh ? 22 : 16;
     const checkStartY = y;
 
+    const drawOneSection = (
+      section: CubiscanCheckSection,
+      x: number,
+      startCy: number
+    ) => {
+      let cy = startCy;
+      const compact = isAgh && section.id === "cargador";
+      doc
+        .font(fonts.bold)
+        .fontSize(8)
+        .fillColor("#000")
+        .text(section.title, x, cy, { width: colW - 4, lineBreak: false });
+      cy += compact ? 11 : isAgh ? 13 : 11;
+      for (const item of section.items) {
+        const key = checkKey(section.id, item.id);
+        const val = p.checks[key];
+        const ok = item.yesNo
+          ? val === "si" || val === true
+          : isChecked(val);
+        checkbox(x, cy, ok, 7);
+        doc.font(fonts.reg).fontSize(6.5).text(item.label, x + 11, cy, {
+          width: colW - 46,
+        });
+        doc
+          .moveTo(x + colW - 34, cy + 7)
+          .lineTo(x + colW - 2, cy + 7)
+          .stroke("#888");
+        if (item.yesNo) {
+          const mark =
+            val === "si" || val === true
+              ? "Sí"
+              : val === "no" || val === false
+                ? "No"
+                : "";
+          if (mark) {
+            doc.font(fonts.bold).fontSize(6.5).text(mark, x + colW - 32, cy);
+          }
+        } else if (ok) {
+          doc.font(fonts.bold).fontSize(7).text("X", x + colW - 20, cy);
+        }
+        cy += compact ? 10 : isAgh ? 12 : 10;
+      }
+      cy += isAgh ? (section.id === "cargador" ? 3 : 6) : 4;
+      return cy;
+    };
+
     const drawSections = (
-      sections: CubiscanCheckSection[],
+      sectionList: CubiscanCheckSection[],
       x: number,
       startY: number
     ) => {
       let cy = startY;
-      for (const section of sections) {
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(8)
-          .fillColor("#000")
-          .text(section.title, x, cy);
-        cy += 11;
-        for (const item of section.items) {
-          const key = checkKey(section.id, item.id);
-          const val = p.checks[key];
-          const ok = item.yesNo
-            ? val === "si" || val === true
-            : isChecked(val);
-          checkbox(x, cy, ok, 7);
-          doc.font("Helvetica").fontSize(6.5).text(item.label, x + 11, cy, {
-            width: colW - 50,
-          });
-          // underline for mark area
-          doc
-            .moveTo(x + colW - 36, cy + 7)
-            .lineTo(x + colW - 4, cy + 7)
-            .stroke("#888");
-          if (item.yesNo) {
-            const mark =
-              val === "si" || val === true
-                ? "Sí"
-                : val === "no" || val === false
-                  ? "No"
-                  : "";
-            if (mark) {
-              doc.font("Helvetica-Bold").fontSize(6.5).text(mark, x + colW - 34, cy);
-            }
-          } else if (ok) {
-            doc.font("Helvetica-Bold").fontSize(7).text("X", x + colW - 22, cy);
-          }
-          cy += 10;
-        }
-        cy += 4;
+      for (const section of sectionList) {
+        cy = drawOneSection(section, x, cy);
       }
       return cy;
     };
 
-    const leftEnd = drawSections(leftSecs, checkLeftX, checkStartY);
-    const rightEnd = drawSections(rightSecs, checkRightX, checkStartY);
-    y = Math.max(leftEnd, rightEnd) + 2;
+    if (isAgh) {
+      const leftEnd = drawSections(leftSecs, checkLeftX, checkStartY);
+      const rightEnd = drawSections(rightSecs, checkRightX, checkStartY);
+      y = Math.max(leftEnd, rightEnd) + 6;
+    } else {
+      const leftEnd = drawSections(leftSecs, checkLeftX, checkStartY);
+      const rightEnd = drawSections(rightSecs, checkRightX, checkStartY);
+      y = Math.max(leftEnd, rightEnd) + 2;
+    }
+
+    if (isAgh) {
+      const detalleH = y - detalleTop;
+      drawBox(M, detalleTop, contentW, detalleH);
+    }
 
     const ensureSpace = (minH: number) => {
       if (y + minH > pageBottom()) {
@@ -649,14 +747,39 @@ export function buildCubiscanOrdenPdf(opts: {
 
     const drawNotesBox = (title: string, body: string, boxH: number) => {
       y = sectionBar(y, title);
-      drawBox(M, y, contentW, boxH, "#fafafa");
+      drawBox(M, y, contentW, boxH, isAgh ? undefined : "#fafafa");
       if (body) {
-        drawLines(doc, body, M + 5, y + 5, lineH);
+        drawLines(doc, body, M + 5, y + 5, lineH, fonts.reg);
       }
       y += boxH + 3;
     };
 
-    if (!commentsText) {
+    const aghNotesLines = 5;
+
+    const drawAghNotesLines = (title: string, body: string, lines = aghNotesLines) => {
+      y = sectionBar(y, title);
+      const rowH = 14;
+      const padTop = 6;
+      const notesH = padTop + lines * rowH + 4;
+      drawBox(M, y, contentW, notesH);
+      for (let i = 0; i < lines; i += 1) {
+        const ruleY = y + padTop + (i + 1) * rowH;
+        doc.moveTo(M + 6, ruleY).lineTo(M + contentW - 6, ruleY).stroke("#bbb");
+      }
+      if (body) {
+        drawLines(doc, body, M + 8, y + padTop, rowH, fonts.reg);
+      }
+      y += notesH + 3;
+    };
+
+    if (isAgh) {
+      if (!(p.comentarios || "").trim()) {
+        drawAghNotesLines("Comentarios/Notas", "", aghNotesLines);
+      } else {
+        ensureSpace(barH + 50);
+        drawAghNotesLines("Comentarios/Notas", (p.comentarios || "").trim(), aghNotesLines);
+      }
+    } else if (!commentsText) {
       drawNotesBox("Comentarios/Notas", "", 36);
     } else {
       let remaining = commentsText;
@@ -670,7 +793,8 @@ export function buildCubiscanOrdenPdf(opts: {
           doc,
           remaining,
           textW,
-          Math.max(lineH, available - 12)
+          Math.max(lineH, available - 12),
+          fonts.reg
         );
         const chunk = fitted.trim() ? fitted : remaining.slice(0, 180);
         const leftover = (fitted.trim() ? rest : remaining.slice(chunk.length)).trim();
@@ -758,7 +882,7 @@ export function buildCubiscanOrdenPdf(opts: {
     drawBox(M, headY, contentW, 14, lightGray);
     for (const c of cols) {
       doc
-        .font("Helvetica-Bold")
+        .font(fonts.bold)
         .fontSize(7)
         .text(c.title, hx + 3, headY + 3, { width: c.w - 6 });
       hx += c.w;
@@ -766,7 +890,9 @@ export function buildCubiscanOrdenPdf(opts: {
     y += 14;
 
     const refs = [...(p.refacciones ?? [])];
-    while (refs.length < 3) {
+    const minRefRows = isAgh ? 2 : 3;
+    const maxRefRows = isAgh ? 3 : 4;
+    while (refs.length < minRefRows) {
       refs.push({
         cantidad: "",
         numeroParte: "",
@@ -774,13 +900,14 @@ export function buildCubiscanOrdenPdf(opts: {
         estado: "reemplazada",
       });
     }
-    for (const r of refs.slice(0, 4)) {
+    for (const r of refs.slice(0, maxRefRows)) {
       const ry = y;
       drawBox(M, ry, contentW, 16);
       let rx = M;
-      checkbox(rx + 3, ry + 4, Boolean(r.cantidad || r.numeroParte || r.descripcion) && r.estado === "reemplazada", 6);
-      doc.font("Helvetica").fontSize(6.5).text("Reemplazada", rx + 12, ry + 4);
-      checkbox(rx + 78, ry + 4, Boolean(r.cantidad || r.numeroParte || r.descripcion) && r.estado === "nueva", 6);
+      const hasData = Boolean(r.cantidad || r.numeroParte || r.descripcion);
+      checkbox(rx + 3, ry + 4, hasData && r.estado === "reemplazada", 6);
+      doc.font(fonts.reg).fontSize(6.5).text("Reemplazada", rx + 12, ry + 4);
+      checkbox(rx + 78, ry + 4, hasData && r.estado === "nueva", 6);
       doc.text("Nueva", rx + 87, ry + 4);
       rx += cols[0].w;
       doc.fontSize(7).text(r.cantidad, rx + 3, ry + 4, { width: cols[1].w - 6 });
@@ -798,25 +925,29 @@ export function buildCubiscanOrdenPdf(opts: {
       y,
       "Califique nuestro servicio, nos interesa su opinión"
     );
-    const rateH = 52;
-    drawBox(M, y, contentW * 0.68, rateH);
+    const rateH = isAgh ? 58 : 52;
+    const leftRateW = contentW * (isAgh ? 0.64 : 0.68);
+    drawBox(M, y, leftRateW, rateH);
 
     const rateRow = (
       label: string,
       options: { key: string; label: string; on: boolean }[],
-      ry: number
+      ry: number,
+      labelW = isAgh ? 168 : 155
     ) => {
-      doc.font("Helvetica").fontSize(7).text(label, M + 4, ry);
-      let ox = M + 155;
+      doc.font(fonts.reg).fontSize(7).text(label, M + 4, ry);
+      let ox = M + labelW;
       for (const o of options) {
         checkbox(ox, ry, o.on, 7);
         doc.text(o.label, ox + 10, ry);
-        ox += 55;
+        ox += isAgh ? 52 : 55;
       }
     };
 
     rateRow(
-      "¿Resolvimos la falla reportada?",
+      isAgh
+        ? "¿Resolvió la falla reportada?"
+        : "¿Resolvimos la falla reportada?",
       [
         { key: "si", label: "Sí", on: p.falloResuelto === "si" },
         { key: "no", label: "No", on: p.falloResuelto === "no" },
@@ -846,46 +977,105 @@ export function buildCubiscanOrdenPdf(opts: {
       y + 31
     );
 
-    // Tiempo reparación box
-    const tX = M + contentW * 0.7;
-    const tW = contentW * 0.3;
+    const tX = M + leftRateW + 4;
+    const tW = contentW - leftRateW - 4;
     drawBox(tX, y, tW, rateH);
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(7)
-      .text("Tiempo de Reparación", tX + 4, y + 4, { width: tW - 8 });
-    doc.font("Helvetica").fontSize(7);
-    doc.text("Fecha:", tX + 4, y + 18);
-    doc
-      .font("Helvetica-Bold")
-      .text(formatFechaAr(p.fechaCalificacion), tX + 40, y + 18, {
+    if (isAgh) {
+      doc
+        .font(fonts.bold)
+        .fontSize(7)
+        .text("Tiempos de Reparación", tX + 4, y + 4, { width: tW - 8, align: "center" });
+      const tableY = y + 16;
+      const tableH = rateH - 20;
+      drawBox(tX + 4, tableY, tW - 8, tableH);
+      const col1W = (tW - 8) / 2;
+      doc
+        .moveTo(tX + 4 + col1W, tableY)
+        .lineTo(tX + 4 + col1W, tableY + tableH)
+        .stroke("#aaa");
+      doc
+        .moveTo(tX + 4, tableY + 12)
+        .lineTo(tX + tW - 4, tableY + 12)
+        .stroke("#aaa");
+      doc
+        .moveTo(tX + 4, tableY + 24)
+        .lineTo(tX + tW - 4, tableY + 24)
+        .stroke("#aaa");
+      doc.font(fonts.bold).fontSize(6.5);
+      doc.text("Fecha", tX + 6, tableY + 2, { width: col1W - 8, align: "center" });
+      doc.text("Horario", tX + 6 + col1W, tableY + 2, {
+        width: col1W - 8,
+        align: "center",
+      });
+      doc.font(fonts.reg).fontSize(7);
+      doc.text(formatFechaAr(p.fechaCalificacion), tX + 6, tableY + 14, {
+        width: col1W - 8,
+        align: "center",
+      });
+      doc.text(p.horarioCalificacion || "", tX + 6 + col1W, tableY + 14, {
+        width: col1W - 8,
+        align: "center",
+      });
+      if (p.tiempoReparacion) {
+        doc
+          .fontSize(6.5)
+          .text(p.tiempoReparacion, tX + 6, tableY + 26, { width: tW - 16, align: "center" });
+      }
+    } else {
+      doc
+        .font(fonts.bold)
+        .fontSize(7)
+        .text("Tiempo de Reparación", tX + 4, y + 4, { width: tW - 8 });
+      doc.font(fonts.reg).fontSize(7);
+      doc.text("Fecha:", tX + 4, y + 18);
+      doc
+        .font(fonts.bold)
+        .text(formatFechaAr(p.fechaCalificacion), tX + 40, y + 18, {
+          width: tW - 46,
+        });
+      doc.font(fonts.reg).text("Horario:", tX + 4, y + 32);
+      doc.font(fonts.bold).text(p.horarioCalificacion || "", tX + 40, y + 32, {
         width: tW - 46,
       });
-    doc.font("Helvetica").text("Horario:", tX + 4, y + 32);
-    doc.font("Helvetica-Bold").text(p.horarioCalificacion || "", tX + 40, y + 32, {
-      width: tW - 46,
-    });
-    if (p.tiempoReparacion) {
-      doc
-        .font("Helvetica")
-        .fontSize(6.5)
-        .text(p.tiempoReparacion, tX + 4, y + 42, { width: tW - 8 });
+      if (p.tiempoReparacion) {
+        doc
+          .font(fonts.reg)
+          .fontSize(6.5)
+          .text(p.tiempoReparacion, tX + 4, y + 42, { width: tW - 8 });
+      }
     }
     y += rateH + 6;
 
     // Sugerencias
-    doc.font("Helvetica").fontSize(7.5).text("COMENTARIOS/SUGERENCIAS:", M, y);
-    doc
-      .moveTo(M + 130, y + 8)
-      .lineTo(M + contentW, y + 8)
-      .stroke("#444");
-    if (p.sugerencias) {
-      doc.font("Helvetica-Bold").fontSize(7.5).text(p.sugerencias, M + 132, y - 1, {
-        width: contentW - 132,
-        ellipsis: true,
-      });
+    if (isAgh) {
+      y = sectionBar(y, "COMENTARIOS / SUGERENCIAS", lightGray, "#000");
+      const rowH = 14;
+      const padTop = 5;
+      const sugLines = 2;
+      const sugH = padTop + sugLines * rowH + 4;
+      drawBox(M, y, contentW, sugH);
+      for (let i = 0; i < sugLines; i += 1) {
+        const ruleY = y + padTop + (i + 1) * rowH;
+        doc.moveTo(M + 6, ruleY).lineTo(M + contentW - 6, ruleY).stroke("#bbb");
+      }
+      if (p.sugerencias) {
+        drawLines(doc, p.sugerencias, M + 8, y + padTop, rowH, fonts.reg);
+      }
+      y += sugH + 4;
+    } else {
+      doc.font(fonts.reg).fontSize(7.5).text("COMENTARIOS/SUGERENCIAS:", M, y);
+      doc
+        .moveTo(M + 130, y + 8)
+        .lineTo(M + contentW, y + 8)
+        .stroke("#444");
+      if (p.sugerencias) {
+        doc.font(fonts.bold).fontSize(7.5).text(p.sugerencias, M + 132, y - 1, {
+          width: contentW - 132,
+          ellipsis: true,
+        });
+      }
+      y += 16;
     }
-    y += 16;
 
     // ——— Firmas ———
     if (H - y - M < 90) {
@@ -897,14 +1087,14 @@ export function buildCubiscanOrdenPdf(opts: {
     drawBox(M + sigW + 10, y, sigW, sigH);
 
     doc
-      .font("Helvetica")
+      .font(fonts.reg)
       .fontSize(7)
       .text("Nombre y firma del Representante del Cliente", M + 4, y + 4, {
         width: sigW - 8,
       });
     if (p.representanteCliente) {
       doc
-        .font("Helvetica-Bold")
+        .font(fonts.bold)
         .fontSize(8)
         .text(p.representanteCliente, M + 4, y + 14, { width: sigW - 8 });
     }
@@ -920,7 +1110,7 @@ export function buildCubiscanOrdenPdf(opts: {
     }
 
     doc
-      .font("Helvetica")
+      .font(fonts.reg)
       .fontSize(7)
       .text(firmaLabel, M + sigW + 14, y + 4, {
         width: sigW - 8,
@@ -928,7 +1118,7 @@ export function buildCubiscanOrdenPdf(opts: {
     const repName = p.representanteCubiscan || p.ingenieros;
     if (repName) {
       doc
-        .font("Helvetica-Bold")
+        .font(fonts.bold)
         .fontSize(8)
         .text(repName.toUpperCase(), M + sigW + 14, y + 14, {
           width: sigW - 8,

@@ -7,6 +7,7 @@ import {
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { DownloadPdfButton } from "@/components/download-pdf-button";
 import { prismaPg } from "@/lib/prisma";
+import { stripPlanillaBoilerplate } from "@/lib/cubiscan-planilla";
 import { getCliente, clienteLabel } from "@/lib/clientes";
 import {
   Badge,
@@ -114,7 +115,7 @@ export default async function MantenimientoDetallePage({
 
         <div className="mb-5 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-muted)]">
-            Pedido del cliente (no editable)
+            Pedido del cliente
           </p>
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -171,11 +172,11 @@ export default async function MantenimientoDetallePage({
             />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Comentario del arreglo (AGH)">
+            <Field label="Comentario del arreglo">
               <textarea
                 name="comentarioArreglo"
                 rows={4}
-                defaultValue={item.comentarioArreglo ?? ""}
+                defaultValue={stripPlanillaBoilerplate(item.comentarioArreglo)}
                 placeholder="Qué se hizo, repuestos, observaciones internas…"
                 className={inputClass}
                 readOnly={estaCerrado}
