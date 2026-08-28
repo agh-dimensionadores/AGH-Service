@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useState } from "react";
 import { CubiscanFotosField } from "@/components/cubiscan-fotos-field";
 import { DownloadPdfButton } from "@/components/download-pdf-button";
+import { EmailDestinosField } from "@/components/email-destinos-field";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { SignaturePad } from "@/components/signature-pad";
 import { Field, inputClass } from "@/components/ui";
 import {
   CUBISCAN_EMPRESA,
   checkKey,
+  checkNoteText,
+  isCheckMarked,
   type CubiscanOrdenPayload,
   type CubiscanRefaccion,
 } from "@/lib/cubiscan-planilla";
@@ -22,7 +25,7 @@ import {
 export function CubiscanPlanillaForm({
   action,
   defaults,
-  emailDefault,
+  emailDefaults,
   readOnly = false,
   firmaIngeniero = "",
   firmaCliente = "",
@@ -36,7 +39,7 @@ export function CubiscanPlanillaForm({
 }: {
   action: (formData: FormData) => Promise<void>;
   defaults: CubiscanOrdenPayload;
-  emailDefault: string;
+  emailDefaults: string[];
   readOnly?: boolean;
   firmaIngeniero?: string;
   firmaCliente?: string;
@@ -109,20 +112,30 @@ export function CubiscanPlanillaForm({
       );
     }
     return (
-      <li key={key}>
-        <label className="flex cursor-pointer items-center gap-3 text-sm text-white">
+      <li className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1 py-0.5 text-sm">
+        <input
+          type="checkbox"
+          name={`check_${key}`}
+          value="true"
+          defaultChecked={isCheckMarked(current)}
+          disabled={readOnly}
+          className="h-4 w-4 accent-[var(--accent)]"
+        />
+        <span className="min-w-0 text-white leading-snug">{item.label}</span>
+        {readOnly ? (
+          <span className="w-56 shrink-0 truncate text-sm text-[var(--ink-muted)] sm:w-64">
+            {checkNoteText(defaults.checks, sectionId, item.id) || "—"}
+          </span>
+        ) : (
           <input
-            type="checkbox"
-            name={`check_${key}`}
-            value="true"
-            defaultChecked={
-              current === true || current === "true" || current === "on"
-            }
-            disabled={readOnly}
-            className="h-4 w-4 accent-[var(--accent)]"
+            name={`checkNota_${key}`}
+            type="text"
+            maxLength={120}
+            defaultValue={checkNoteText(defaults.checks, sectionId, item.id)}
+            placeholder="Nota"
+            className={`${inputClass} w-56 shrink-0 py-1 text-sm sm:w-64`}
           />
-          {item.label}
-        </label>
+        )}
       </li>
     );
   };
@@ -139,7 +152,7 @@ export function CubiscanPlanillaForm({
       <h4 className={`font-medium text-white ${isAgh ? "text-sm" : "mb-3"}`}>
         {section.title}
       </h4>
-      <ul className="space-y-2">
+      <ul className="space-y-1">
         {section.items.map((item) => renderCheckItem(section.id, item))}
       </ul>
     </div>
@@ -246,8 +259,8 @@ export function CubiscanPlanillaForm({
 
       <section className="rounded-xl border border-[var(--line)] p-4">
         <h4 className="mb-3 font-medium text-white">Tipo de servicio</h4>
-        <div className="flex flex-wrap gap-4 text-sm text-white">
-          <label className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-white">
+          <label className="inline-flex items-center gap-2">
             <input
               type="checkbox"
               name="embalaje"
@@ -258,26 +271,26 @@ export function CubiscanPlanillaForm({
             />
             Embalaje
           </label>
-          <label className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-2">
             Instalación
             <select
               name="instalacion"
               defaultValue={defaults.instalacion}
               disabled={readOnly}
-              className={`${inputClass} w-auto`}
+              className={`${inputClass} h-9 w-auto py-1`}
             >
               <option value="">No</option>
               <option value="venta">Venta</option>
               <option value="renta">Renta</option>
             </select>
           </label>
-          <label className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-2">
             Mantenimiento
             <select
               name="mantenimientoTipo"
               defaultValue={defaults.mantenimientoTipo}
               disabled={readOnly}
-              className={`${inputClass} w-auto`}
+              className={`${inputClass} h-9 w-auto py-1`}
             >
               <option value="">—</option>
               <option value="preventivo">Preventivo</option>
@@ -479,15 +492,7 @@ export function CubiscanPlanillaForm({
       {!readOnly ? (
         <section className="grid gap-4 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4 sm:grid-cols-[1fr_auto] sm:items-end">
           <input type="hidden" name="intent" value="guardar" />
-          <Field label="Email del cliente">
-            <input
-              name="emailDestino"
-              type="email"
-              defaultValue={emailDefault}
-              className={inputClass}
-              placeholder="cliente@empresa.com"
-            />
-          </Field>
+          <EmailDestinosField defaults={emailDefaults} required />
           <SubmitButton
             className="btn-ghost"
             pendingLabel="Guardando…"
@@ -501,7 +506,7 @@ export function CubiscanPlanillaForm({
           <p className="sm:col-span-2 text-xs text-[var(--ink-muted)]">
             Podés guardar y seguir editando las veces que quieras. Al enviar el
             mail la orden queda bloqueada (solo reenvío y descarga del PDF).
-            El envío pide la firma del representante y un email válido. La firma del
+            El envío pide la firma del representante y al menos un email válido. La firma del
             cliente se registra acá en la visita.
           </p>
         </section>

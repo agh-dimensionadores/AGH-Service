@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 
 export type SendMailInput = {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   /** Adjunto HTML de la orden (opcional) */

@@ -7,7 +7,6 @@ import {
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { DownloadPdfButton } from "@/components/download-pdf-button";
 import { prismaPg } from "@/lib/prisma";
-import { stripPlanillaBoilerplate } from "@/lib/cubiscan-planilla";
 import { getCliente, clienteLabel } from "@/lib/clientes";
 import {
   Badge,
@@ -171,18 +170,6 @@ export default async function MantenimientoDetallePage({
               className={inputClass}
             />
           </Field>
-          <div className="sm:col-span-2">
-            <Field label="Comentario del arreglo">
-              <textarea
-                name="comentarioArreglo"
-                rows={4}
-                defaultValue={stripPlanillaBoilerplate(item.comentarioArreglo)}
-                placeholder="Qué se hizo, repuestos, observaciones internas…"
-                className={inputClass}
-                readOnly={estaCerrado}
-              />
-            </Field>
-          </div>
 
           {estaCerrado ? (
             <div className="sm:col-span-2 space-y-3 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
@@ -259,8 +246,8 @@ export default async function MantenimientoDetallePage({
                 Cerrar trabajo
               </button>
               <p className="sm:col-span-2 text-xs text-[var(--ink-muted)]">
-                Marca el pedido como realizado. Podés completar el comentario
-                arriba antes de cerrar.
+                Marca el pedido como realizado. Los comentarios técnicos van en la
+                orden de servicio al cerrar.
               </p>
             </div>
           )}

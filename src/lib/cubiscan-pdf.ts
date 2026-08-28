@@ -4,7 +4,9 @@ import PDFDocument from "pdfkit";
 import {
   CUBISCAN_EMPRESA,
   checkKey,
+  checkNoteText,
   formatFechaAr,
+  isCheckMarked,
   type CubiscanCheckSection,
   type CubiscanOrdenPayload,
 } from "@/lib/cubiscan-planilla";
@@ -32,7 +34,7 @@ function dataUrlToBuffer(dataUrl?: string | null) {
 }
 
 function isChecked(val: string | boolean | undefined) {
-  return val === true || val === "true" || val === "on" || val === "si";
+  return isCheckMarked(val);
 }
 
 function logoPath(...names: string[]) {
@@ -669,24 +671,29 @@ export function buildCubiscanOrdenPdf(opts: {
 
     // Service type row
     const tipoY = y;
-    checkbox(M + 4, tipoY, p.embalaje);
-    doc.font(fonts.bold).fontSize(7.5).text("EMBALAJE", M + 15, tipoY);
+    const tipoCb = 7;
+    const tipoTextY = tipoY + 0.5;
+    const tipoTextSize = 7;
 
-    checkbox(M + 88, tipoY, Boolean(p.instalacion));
-    doc.text(isAgh ? "INSTALACIÓN" : "INSTALACION", M + 99, tipoY);
-    checkbox(M + 168, tipoY + 1, p.instalacion === "venta", 7);
-    doc.font(fonts.reg).fontSize(7).text("Venta", M + 178, tipoY + 1);
-    doc.font(fonts.reg).fontSize(7).text("/", M + 206, tipoY + 1);
-    checkbox(M + 214, tipoY + 1, p.instalacion === "renta", 7);
-    doc.text("Renta", M + 224, tipoY + 1);
+    checkbox(M + 4, tipoY, p.embalaje, tipoCb);
+    doc.font(fonts.bold).fontSize(tipoTextSize).text("EMBALAJE", M + 14, tipoTextY);
 
-    checkbox(M + 268, tipoY, Boolean(p.mantenimientoTipo));
-    doc.font(fonts.bold).fontSize(7.5).text("MANTENIMIENTO", M + 279, tipoY);
-    checkbox(M + 368, tipoY + 1, p.mantenimientoTipo === "preventivo", 7);
-    doc.font(fonts.reg).fontSize(7).text("Preventivo", M + 378, tipoY + 1);
-    doc.font(fonts.reg).fontSize(7).text("/", M + 424, tipoY + 1);
-    checkbox(M + 432, tipoY + 1, p.mantenimientoTipo === "correctivo", 7);
-    doc.text("Correctivo", M + 442, tipoY + 1);
+    checkbox(M + 88, tipoY, Boolean(p.instalacion), tipoCb);
+    doc.text(isAgh ? "INSTALACIÓN" : "INSTALACION", M + 98, tipoTextY);
+
+    checkbox(M + 168, tipoY, p.instalacion === "venta", tipoCb);
+    doc.font(fonts.reg).fontSize(tipoTextSize).text("Venta", M + 178, tipoTextY);
+    doc.text("/", M + 206, tipoTextY);
+    checkbox(M + 214, tipoY, p.instalacion === "renta", tipoCb);
+    doc.text("Renta", M + 224, tipoTextY);
+
+    checkbox(M + 268, tipoY, Boolean(p.mantenimientoTipo), tipoCb);
+    doc.font(fonts.bold).fontSize(tipoTextSize).text("MANTENIMIENTO", M + 278, tipoTextY);
+    checkbox(M + 368, tipoY, p.mantenimientoTipo === "preventivo", tipoCb);
+    doc.font(fonts.reg).fontSize(tipoTextSize).text("Preventivo", M + 378, tipoTextY);
+    doc.text("/", M + 424, tipoTextY);
+    checkbox(M + 432, tipoY, p.mantenimientoTipo === "correctivo", tipoCb);
+    doc.text("Correctivo", M + 442, tipoTextY);
 
     y += isAgh ? 22 : 16;
     const checkStartY = y;
@@ -710,14 +717,26 @@ export function buildCubiscanOrdenPdf(opts: {
         const ok = item.yesNo
           ? val === "si" || val === true
           : isChecked(val);
-        checkbox(x, cy, ok, 7);
-        doc.font(fonts.reg).fontSize(6.5).text(item.label, x + 11, cy, {
-          width: colW - 46,
+        const noteW = 52;
+        const labelPad = 11;
+        const labelMaxW = colW - labelPad - noteW - 6;
+        doc.font(fonts.reg).fontSize(6.5);
+        const labelW = doc.widthOfString(item.label);
+        const wraps = labelW > labelMaxW;
+        const labelH = doc.heightOfString(item.label, {
+          width: wraps ? labelMaxW : labelW,
         });
-        doc
-          .moveTo(x + colW - 34, cy + 7)
-          .lineTo(x + colW - 2, cy + 7)
-          .stroke("#888");
+        const rowH = Math.max(compact ? 10 : isAgh ? 11 : 10, labelH + 2);
+        const lineY = cy + rowH - 2;
+
+        checkbox(x, cy, ok, 7);
+        doc.text(item.label, x + labelPad, cy, {
+          width: wraps ? labelMaxW : labelW,
+          lineBreak: wraps,
+        });
+
+        const noteX = x + colW - noteW - 2;
+
         if (item.yesNo) {
           const mark =
             val === "si" || val === true
@@ -726,12 +745,26 @@ export function buildCubiscanOrdenPdf(opts: {
                 ? "No"
                 : "";
           if (mark) {
-            doc.font(fonts.bold).fontSize(6.5).text(mark, x + colW - 32, cy);
+            doc.font(fonts.bold).fontSize(6.5).text(mark, x + colW - noteW - 2, cy);
           }
-        } else if (ok) {
-          doc.font(fonts.bold).fontSize(7).text("X", x + colW - 20, cy);
+        } else {
+          doc
+            .moveTo(noteX, lineY)
+            .lineTo(noteX + noteW, lineY)
+            .stroke("#888");
+          const note = checkNoteText(p.checks, section.id, item.id);
+          if (note) {
+            doc
+              .font(fonts.reg)
+              .fontSize(6.5)
+              .text(note, noteX, cy + 0.5, {
+                width: noteW,
+                height: lineY - cy,
+                ellipsis: true,
+              });
+          }
         }
-        cy += compact ? 10 : isAgh ? 12 : 10;
+        cy += rowH;
       }
       cy += isAgh ? (section.id === "cargador" ? 3 : 6) : 4;
       return cy;

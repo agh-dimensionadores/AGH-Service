@@ -120,6 +120,23 @@ export function checkKey(sectionId: string, itemId: string) {
   return `${sectionId}.${itemId}`;
 }
 
+export function checkNoteKey(sectionId: string, itemId: string) {
+  return `${checkKey(sectionId, itemId)}_nota`;
+}
+
+export function isCheckMarked(val: string | boolean | undefined) {
+  return val === true || val === "true" || val === "on";
+}
+
+export function checkNoteText(
+  checks: Record<string, string | boolean>,
+  sectionId: string,
+  itemId: string
+) {
+  const note = checks[checkNoteKey(sectionId, itemId)];
+  return typeof note === "string" ? note.trim() : "";
+}
+
 const PLANILLA_BOILERPLATE = new Set([
   "Cerrado con planilla CubiScan",
   "Cerrado con planilla AGH Dimensionadores",
@@ -233,7 +250,12 @@ function checkValueHtml(section: CubiscanCheckSection, item: CubiscanCheckItem, 
     if (val === "no" || val === false) return "No";
     return "—";
   }
-  return val === true || val === "true" || val === "on" ? "✓" : "—";
+  const note = checkNoteText(checks, section.id, item.id);
+  const marked = isCheckMarked(val);
+  if (marked && note) return `✓ · ${esc(note)}`;
+  if (marked) return "✓";
+  if (note) return esc(note);
+  return "—";
 }
 
 export function buildCubiscanOrdenHtml(opts: {

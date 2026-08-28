@@ -13,6 +13,12 @@ import {
   type CubiscanRefaccion,
 } from "@/lib/cubiscan-planilla";
 import { mailConfigured, sendMail } from "@/lib/mail";
+import {
+  emailDestinosFromForm,
+  emailDestinosFromFormOrStored,
+  formatEmailDestinos,
+  resolveEmailDestinosGuardado,
+} from "@/lib/email-destinos";
 import { prismaPg } from "@/lib/prisma";
 import {
   MAX_FOTO_MANTENIMIENTO_BYTES,
@@ -670,7 +676,6 @@ export async function updateMantenimiento(id: number, formData: FormData) {
       arreglado: existing.arreglado,
       programado: optionalDateTimeLocal(formData, "programado"),
       asignadoA: optionalStr(formData, "asignadoA"),
-      comentarioArreglo: optionalStr(formData, "comentarioArreglo"),
     },
   });
 
@@ -710,8 +715,6 @@ export async function cerrarMantenimiento(id: number, formData: FormData) {
     );
   }
 
-  const comentarioArreglo =
-    stripPlanillaBoilerplate(optionalStr(formData, "comentarioArreglo")) || null;
   const arreglado = optionalDate(formData, "arreglado") ?? new Date();
 
   await prismaPg.clienteMantenimiento.update({
@@ -722,7 +725,6 @@ export async function cerrarMantenimiento(id: number, formData: FormData) {
       solicitado: existing.solicitado,
       estado: "cerrado",
       arreglado,
-      comentarioArreglo,
       programado: optionalDateTimeLocal(formData, "programado"),
       asignadoA: optionalStr(formData, "asignadoA"),
     },
@@ -768,7 +770,14 @@ function planillaMailOpts(
 function parseCubiscanPayload(formData: FormData): CubiscanOrdenPayload {
   const checks: Record<string, string | boolean> = {};
   for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("check_") || typeof value !== "string") continue;
+    if (typeof value !== "string") continue;
+    if (key.startsWith("checkNota_")) {
+      const checkId = key.slice("checkNota_".length);
+      const note = value.trim();
+      if (note) checks[`${checkId}_nota`] = note;
+      continue;
+    }
+    if (!key.startsWith("check_")) continue;
     const checkId = key.slice("check_".length);
     if (value === "true" || value === "on") checks[checkId] = true;
     else if (value === "si" || value === "no") checks[checkId] = value;
@@ -1228,7 +1237,7 @@ export async function guardarPlanillaCubiscan(
   await requireAdmin();
   const item = await loadCubiscanMantenimiento(id);
   await upsertCubiscanOrden(id, item, formData, {
-    emailDestino: optionalStr(formData, "emailDestino")?.toLowerCase() ?? null,
+    emailDestino: resolveEmailDestinosGuardado(formData),
   });
 
   touch(
@@ -1252,10 +1261,11 @@ export async function enviarPlanillaCubiscan(
     redirect(`/mantenimientos/${id}/planilla-cubiscan`);
   }
 
-  const emailDestino = str(formData, "emailDestino").toLowerCase();
-  if (!emailDestino.includes("@")) {
-    throw new Error("Ingresá un email de cliente válido");
+  const destinos = emailDestinosFromForm(formData);
+  if (!destinos.length) {
+    throw new Error("Ingresá al menos un email de destino válido");
   }
+  const emailDestino = formatEmailDestinos(destinos);
   if (!mailConfigured()) {
     throw new Error(
       "SMTP no configurado. Definí SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS y SMTP_FROM en .env"
@@ -1278,7 +1288,7 @@ export async function enviarPlanillaCubiscan(
 
   try {
     await sendMail({
-      to: emailDestino,
+      to: destinos,
       subject: mail.subject,
       html: mail.html,
       attachments: [
@@ -1337,13 +1347,11 @@ export async function reenviarPlanillaCubiscan(
   });
   if (!orden) throw new Error("No hay planilla para este trabajo");
 
-  const emailDestino =
-    str(formData, "emailDestino").toLowerCase() ||
-    orden.emailDestino ||
-    "";
-  if (!emailDestino.includes("@")) {
-    throw new Error("Ingresá un email válido");
+  const destinos = emailDestinosFromFormOrStored(formData, orden.emailDestino);
+  if (!destinos.length) {
+    throw new Error("Ingresá al menos un email de destino válido");
   }
+  const emailDestino = formatEmailDestinos(destinos);
 
   const payload = emptyCubiscanPayload(
     orden.payload as unknown as Partial<CubiscanOrdenPayload>
@@ -1368,7 +1376,7 @@ export async function reenviarPlanillaCubiscan(
   }
 
   await sendMail({
-    to: emailDestino,
+    to: destinos,
     subject: mail.subject,
     html: mail.html,
     attachments: [

@@ -7,13 +7,12 @@ import {
 import { CubiscanFotosField } from "@/components/cubiscan-fotos-field";
 import { CubiscanPlanillaForm } from "@/components/cubiscan-planilla-form";
 import { DownloadPdfButton } from "@/components/download-pdf-button";
+import { EmailDestinosField } from "@/components/email-destinos-field";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import {
-  Field,
   PageHeader,
   Panel,
   SecondaryLink,
-  inputClass,
 } from "@/components/ui";
 import { getCliente, clienteLabel } from "@/lib/clientes";
 import {
@@ -22,6 +21,10 @@ import {
   type CubiscanOrdenPayload,
 } from "@/lib/cubiscan-planilla";
 import { calibracionPesoAplica, extractCalibracionPeso } from "@/lib/calibracion-peso";
+import {
+  defaultEmailDestinos,
+  formatEmailDestinosDisplay,
+} from "@/lib/email-destinos";
 import { mailConfigured } from "@/lib/mail";
 import {
   planillaKind,
@@ -94,7 +97,8 @@ export default async function PlanillaCubiscanPage({
   const locked = Boolean(saved?.emailEnviadoEn);
   const submit = submitPlanillaCubiscan.bind(null, item.id);
   const reenviar = reenviarPlanillaCubiscan.bind(null, item.id);
-  const emailDefault = saved?.emailDestino || cliente?.email || "";
+  const emailDefaults = defaultEmailDestinos(saved?.emailDestino, cliente?.email);
+  const emailEnviadoDisplay = formatEmailDestinosDisplay(saved?.emailDestino);
   const pdfHref = `/api/mantenimientos/${item.id}/planilla-cubiscan/pdf`;
   const esCubiscan = calibracionPesoAplica(maquina.marca, maquina.modelo);
   const calibracion = esCubiscan ? extractCalibracionPeso(saved?.payload) : null;
@@ -121,7 +125,7 @@ export default async function PlanillaCubiscanPage({
       {enviado === "1" ? (
         <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
           Orden enviada por correo
-          {saved?.emailDestino ? ` a ${saved.emailDestino}` : ""}.
+          {emailEnviadoDisplay ? ` a ${emailEnviadoDisplay}` : ""}.
         </p>
       ) : null}
       {guardado === "1" ? (
@@ -134,7 +138,7 @@ export default async function PlanillaCubiscanPage({
       {saved?.emailEnviadoEn ? (
         <p className="mb-4 text-sm text-[var(--ink-muted)]">
           Enviada el {formatDate(saved.emailEnviadoEn)}
-          {saved.emailDestino ? ` → ${saved.emailDestino}` : ""}. Ya no se puede
+          {emailEnviadoDisplay ? ` → ${emailEnviadoDisplay}` : ""}. Ya no se puede
           editar.
         </p>
       ) : null}
@@ -143,15 +147,7 @@ export default async function PlanillaCubiscanPage({
         {locked ? (
           <div className="space-y-5">
             <GuardedForm action={reenviar} className="space-y-4">
-              <Field label="Email del cliente">
-                <input
-                  name="emailDestino"
-                  type="email"
-                  required
-                  defaultValue={emailDefault}
-                  className={inputClass}
-                />
-              </Field>
+              <EmailDestinosField defaults={emailDefaults} required />
               <div className="flex flex-wrap items-center gap-2">
                 <DownloadPdfButton href={pdfHref}>
                   Descargar PDF
@@ -194,7 +190,7 @@ export default async function PlanillaCubiscanPage({
             <CubiscanPlanillaForm
               action={submit}
               defaults={defaults}
-              emailDefault={emailDefault}
+              emailDefaults={emailDefaults}
               readOnly={false}
               firmaIngeniero={saved?.firmaIngeniero ?? ""}
               firmaCliente={saved?.firmaCliente ?? ""}
