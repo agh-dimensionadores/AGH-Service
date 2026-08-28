@@ -21,10 +21,11 @@ import {
   stripPlanillaBoilerplate,
   type CubiscanOrdenPayload,
 } from "@/lib/cubiscan-planilla";
+import { calibracionPesoAplica, extractCalibracionPeso } from "@/lib/calibracion-peso";
 import { mailConfigured } from "@/lib/mail";
 import {
-  aghModeloCode,
   planillaKind,
+  planillaModeloFromMaquina,
   planillaPageTitle,
 } from "@/lib/planilla-template";
 import { prismaPg } from "@/lib/prisma";
@@ -68,21 +69,16 @@ export default async function PlanillaCubiscanPage({
   }
 
   const cliente = await getCliente(item.instalacion.idCliente);
-  const modelo =
-    kind === "agh"
-      ? aghModeloCode(maquina.marca, maquina.modelo) ||
-        (maquina.modelo || "").trim() ||
-        "PDC"
-      : [maquina.marca, maquina.modelo].filter(Boolean).join(" ");
+  const modelo = planillaModeloFromMaquina(maquina.marca, maquina.modelo);
 
   const saved = item.ordenCubiscan;
   const savedPayload = saved?.payload as CubiscanOrdenPayload | null;
   const defaults = emptyCubiscanPayload({
     ...(savedPayload ?? {}),
-    modelo: savedPayload?.modelo || modelo,
+    modelo,
     ingenieros: savedPayload?.ingenieros || item.asignadoA || "",
-    cliente: savedPayload?.cliente || clienteLabel(cliente),
-    numeroSerie: savedPayload?.numeroSerie || item.instalacion.numeroSerie,
+    cliente: clienteLabel(cliente),
+    numeroSerie: item.instalacion.numeroSerie,
     ubicacion: savedPayload?.ubicacion || item.instalacion.sitio || "",
     fecha:
       savedPayload?.fecha ||
@@ -100,6 +96,15 @@ export default async function PlanillaCubiscanPage({
   const reenviar = reenviarPlanillaCubiscan.bind(null, item.id);
   const emailDefault = saved?.emailDestino || cliente?.email || "";
   const pdfHref = `/api/mantenimientos/${item.id}/planilla-cubiscan/pdf`;
+  const esCubiscan = calibracionPesoAplica(maquina.marca, maquina.modelo);
+  const calibracion = esCubiscan ? extractCalibracionPeso(saved?.payload) : null;
+  const calibracionHref = esCubiscan
+    ? `/mantenimientos/${item.id}/planilla-cubiscan/calibracion-peso`
+    : undefined;
+  const calibracionPdfHref =
+    esCubiscan && calibracion?.activa
+      ? `/api/mantenimientos/${item.id}/calibracion-peso/pdf`
+      : undefined;
 
   return (
     <div>
@@ -166,12 +171,25 @@ export default async function PlanillaCubiscanPage({
                 readOnly
               />
             ) : null}
+            {calibracionHref ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <SecondaryLink href={calibracionHref}>
+                  Plantilla de calibración de peso
+                </SecondaryLink>
+                {calibracionPdfHref ? (
+                  <DownloadPdfButton href={calibracionPdfHref}>
+                    PDF calibración
+                  </DownloadPdfButton>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : (
           <>
             <p className="mb-5 text-sm text-[var(--ink-muted)]">
-              Completá lo que va en el PDF. Guardá las veces que hace falta; al
-              tocar Enviar mail la orden se bloquea.
+              Completá la planilla técnica y guardá. Podés registrar la firma del
+              cliente acá en la visita (desde tu celular). El cliente puede
+              calificar el servicio desde su portal hasta que envíes el mail.
             </p>
             <CubiscanPlanillaForm
               action={submit}
@@ -184,6 +202,9 @@ export default async function PlanillaCubiscanPage({
               fotos={saved?.fotos ?? []}
               kind={kind}
               pdfHref={saved ? pdfHref : undefined}
+              calibracionDisponible={esCubiscan}
+              calibracionHref={calibracionHref}
+              calibracionPdfHref={calibracionPdfHref}
             />
           </>
         )}

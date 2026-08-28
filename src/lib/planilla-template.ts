@@ -24,6 +24,22 @@ export function planillaKind(
   return null;
 }
 
+/** Modelo que va en la planilla/PDF, derivado del catálogo (no editable). */
+export function planillaModeloFromMaquina(
+  marca?: string | null,
+  modelo?: string | null
+): string {
+  const kind = planillaKind(marca, modelo);
+  if (kind === "agh") {
+    return (
+      aghModeloCode(marca, modelo) ||
+      (modelo || "").trim() ||
+      "PDC"
+    );
+  }
+  return [marca, modelo].filter(Boolean).join(" ");
+}
+
 export const AGH_CHECK_SECTIONS: CubiscanCheckSection[] = [
   {
     id: "estructura",

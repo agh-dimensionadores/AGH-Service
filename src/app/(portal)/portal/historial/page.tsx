@@ -7,6 +7,7 @@ import {
   PrimaryLink,
   estadoTone,
 } from "@/components/ui";
+import { planillaKind } from "@/lib/planilla-template";
 import {
   formatDate,
   labelEstado,
@@ -26,7 +27,10 @@ export default async function PortalHistorialPage({
   const items = await prismaPg.clienteMantenimiento.findMany({
     where: { instalacion: { idCliente: session.clienteId! } },
     orderBy: { solicitado: "desc" },
-    include: { instalacion: { include: { maquina: true } } },
+    include: {
+      instalacion: { include: { maquina: true } },
+      ordenCubiscan: { select: { emailEnviadoEn: true } },
+    },
   });
 
   return (
@@ -63,7 +67,18 @@ export default async function PortalHistorialPage({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {items.map((item) => {
+                const kind = planillaKind(
+                  item.instalacion.maquina.marca,
+                  item.instalacion.maquina.modelo
+                );
+                const puedeEncuesta =
+                  item.estado === "cerrado" &&
+                  Boolean(kind) &&
+                  Boolean(item.ordenCubiscan) &&
+                  !item.ordenCubiscan?.emailEnviadoEn;
+
+                return (
                 <tr key={item.id}>
                   <td>
                     <Link
@@ -73,6 +88,14 @@ export default async function PortalHistorialPage({
                       {mantenimientoTitulo(item)}
                     </Link>
                     <p className="text-[var(--ink-muted)]">{item.tipo}</p>
+                    {puedeEncuesta ? (
+                      <Link
+                        href={`/portal/mantenimientos/${item.id}/encuesta`}
+                        className="mt-1 inline-block text-xs text-[var(--accent)] underline"
+                      >
+                        Calificar servicio
+                      </Link>
+                    ) : null}
                   </td>
                   <td>{machineName(item.instalacion)}</td>
                   <td>{formatDate(item.solicitado)}</td>
@@ -82,7 +105,8 @@ export default async function PortalHistorialPage({
                     </Badge>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

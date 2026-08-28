@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { CubiscanFotosField } from "@/components/cubiscan-fotos-field";
 import { DownloadPdfButton } from "@/components/download-pdf-button";
@@ -14,8 +15,6 @@ import {
 } from "@/lib/cubiscan-planilla";
 import {
   checkSectionsFor,
-  planillaFalloPregunta,
-  planillaFirmaLabel,
   planillaTitulo,
   type PlanillaKind,
 } from "@/lib/planilla-template";
@@ -31,6 +30,9 @@ export function CubiscanPlanillaForm({
   fotos = [],
   kind = "cubiscan",
   pdfHref,
+  calibracionDisponible = false,
+  calibracionHref,
+  calibracionPdfHref,
 }: {
   action: (formData: FormData) => Promise<void>;
   defaults: CubiscanOrdenPayload;
@@ -42,6 +44,9 @@ export function CubiscanPlanillaForm({
   fotos?: { id: number }[];
   kind?: PlanillaKind;
   pdfHref?: string;
+  calibracionDisponible?: boolean;
+  calibracionHref?: string;
+  calibracionPdfHref?: string;
 }) {
   const [refacciones, setRefacciones] = useState<CubiscanRefaccion[]>(
     defaults.refacciones?.length
@@ -63,7 +68,6 @@ export function CubiscanPlanillaForm({
 
   const sections = checkSectionsFor(kind);
   const titulo = planillaTitulo(kind);
-  const firmaLabel = planillaFirmaLabel(kind);
   const isAgh = kind === "agh";
   const leftSections = sections.filter((s) =>
     ["estructura", "energia", "cargador"].includes(s.id)
@@ -164,7 +168,7 @@ export function CubiscanPlanillaForm({
             name="modelo"
             required
             defaultValue={defaults.modelo}
-            readOnly={readOnly}
+            readOnly
             className={inputClass}
           />
         </Field>
@@ -176,7 +180,7 @@ export function CubiscanPlanillaForm({
             className={inputClass}
           />
         </Field>
-        <Field label="Ingeniero(s) *">
+        <Field label="Representante(s) *">
           <input
             name="ingenieros"
             required
@@ -209,7 +213,7 @@ export function CubiscanPlanillaForm({
             name="cliente"
             required
             defaultValue={defaults.cliente}
-            readOnly={readOnly}
+            readOnly
             className={inputClass}
           />
         </Field>
@@ -226,7 +230,7 @@ export function CubiscanPlanillaForm({
             name="numeroSerie"
             required
             defaultValue={defaults.numeroSerie}
-            readOnly={readOnly}
+            readOnly
             className={inputClass}
           />
         </Field>
@@ -397,124 +401,54 @@ export function CubiscanPlanillaForm({
         </div>
       </section>
 
-      <section className="rounded-xl border border-[var(--line)] p-4">
-        <h3 className="brand-font mb-3 text-lg font-semibold text-white">
-          Califique nuestro servicio
-        </h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={planillaFalloPregunta(kind)}>
-            <select
-              name="falloResuelto"
-              defaultValue={defaults.falloResuelto}
-              disabled={readOnly}
-              className={inputClass}
-            >
-              <option value="">—</option>
-              <option value="si">Sí</option>
-              <option value="no">No</option>
-              <option value="en_proceso">En proceso</option>
-            </select>
-          </Field>
-          <Field label="El servicio de mantenimiento fue">
-            <select
-              name="velocidadServicio"
-              defaultValue={defaults.velocidadServicio}
-              disabled={readOnly}
-              className={inputClass}
-            >
-              <option value="">—</option>
-              <option value="rapido">Rápido</option>
-              <option value="normal">Normal</option>
-              <option value="lento">Lento</option>
-            </select>
-          </Field>
-          <Field label="El trato del Ingeniero fue">
-            <select
-              name="tratoIngeniero"
-              defaultValue={defaults.tratoIngeniero}
-              disabled={readOnly}
-              className={inputClass}
-            >
-              <option value="">—</option>
-              <option value="amable">Amable</option>
-              <option value="descortes">Descortés</option>
-            </select>
-          </Field>
-          <Field label="Tiempo de reparación">
-            <input
-              name="tiempoReparacion"
-              defaultValue={defaults.tiempoReparacion}
-              readOnly={readOnly}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Fecha (calificación)">
-            <input
-              name="fechaCalificacion"
-              type="date"
-              defaultValue={defaults.fechaCalificacion}
-              readOnly={readOnly}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Horario">
-            <input
-              name="horarioCalificacion"
-              defaultValue={defaults.horarioCalificacion}
-              readOnly={readOnly}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Representante del Cliente">
-            <input
-              name="representanteCliente"
-              defaultValue={defaults.representanteCliente}
-              readOnly={readOnly}
-              className={inputClass}
-            />
-          </Field>
-          <Field label={firmaLabel}>
-            <input
-              name="representanteCubiscan"
-              defaultValue={defaults.representanteCubiscan}
-              readOnly={readOnly}
-              className={inputClass}
-            />
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Comentarios / sugerencias">
-              <input
-                name="sugerencias"
-                defaultValue={defaults.sugerencias}
-                readOnly={readOnly}
-                className={inputClass}
-              />
-            </Field>
+      {calibracionDisponible && calibracionHref ? (
+        <section className="rounded-xl border border-[var(--line)] p-4">
+          <h4 className="mb-2 font-medium text-white">
+            Calibración de peso (opcional · solo CubiScan)
+          </h4>
+          <p className="mb-3 text-sm text-[var(--ink-muted)]">
+            Plantilla aparte con las 31 mediciones de peso en los cuatro puntos
+            de la plataforma. Disponible solo para equipos CubiScan.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={calibracionHref} className="btn-ghost inline-flex">
+              Plantilla de calibración de peso
+            </Link>
+            {calibracionPdfHref ? (
+              <DownloadPdfButton href={calibracionPdfHref}>
+                PDF calibración
+              </DownloadPdfButton>
+            ) : null}
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       {!readOnly ? (
-        <section className="grid gap-6 sm:grid-cols-2">
-          <SignaturePad
-            name="firmaCliente"
-            label="Firma del cliente"
-            required={false}
-            defaultValue={firmaCliente}
-          />
-          <SignaturePad
-            name="firmaIngeniero"
-            label={`Firma del ingeniero (${kind === "agh" ? "AGH" : "CubiScan"})`}
-            required={false}
-            defaultValue={firmaIngeniero}
-          />
+        <section className="space-y-3">
+          <p className="text-sm text-[var(--ink-muted)]">
+            Podés registrar la firma del cliente acá en la visita (desde tu
+            celular). La encuesta de servicio solo la completa el cliente en su
+            portal.
+          </p>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <SignaturePad
+              name="firmaCliente"
+              label="Firma del cliente"
+              required={false}
+              defaultValue={firmaCliente}
+            />
+            <SignaturePad
+              name="firmaIngeniero"
+              label={`Firma del representante (${kind === "agh" ? "AGH" : "CubiScan"})`}
+              required={false}
+              defaultValue={firmaIngeniero}
+            />
+          </div>
         </section>
       ) : (
         <section className="grid gap-6 sm:grid-cols-2">
           <div>
-            <p className="mb-2 text-sm text-[var(--ink-muted)]">
-              Firma del cliente
-            </p>
+            <p className="mb-2 text-sm text-[var(--ink-muted)]">Firma del cliente</p>
             {firmaCliente ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -527,14 +461,12 @@ export function CubiscanPlanillaForm({
             )}
           </div>
           <div>
-            <p className="mb-2 text-sm text-[var(--ink-muted)]">
-              Firma del ingeniero
-            </p>
+            <p className="mb-2 text-sm text-[var(--ink-muted)]">Firma del representante</p>
             {firmaIngeniero ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={firmaIngeniero}
-                alt="Firma ingeniero"
+                alt="Firma representante"
                 className="h-28 rounded-xl border border-[var(--line)] bg-white object-contain"
               />
             ) : (
@@ -569,7 +501,8 @@ export function CubiscanPlanillaForm({
           <p className="sm:col-span-2 text-xs text-[var(--ink-muted)]">
             Podés guardar y seguir editando las veces que quieras. Al enviar el
             mail la orden queda bloqueada (solo reenvío y descarga del PDF).
-            El envío pide ambas firmas y un email válido.
+            El envío pide la firma del representante y un email válido. La firma del
+            cliente se registra acá en la visita.
           </p>
         </section>
       ) : null}

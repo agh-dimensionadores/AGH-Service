@@ -5,8 +5,9 @@ import {
   stripPlanillaBoilerplate,
   type CubiscanOrdenPayload,
 } from "@/lib/cubiscan-planilla";
+import { getCliente, clienteLabel } from "@/lib/clientes";
 import { prismaPg } from "@/lib/prisma";
-import { planillaKind } from "@/lib/planilla-template";
+import { planillaKind, planillaModeloFromMaquina } from "@/lib/planilla-template";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +49,14 @@ export async function GET(
       orden.payload as unknown as Partial<CubiscanOrdenPayload>
     );
     payload.comentarios = stripPlanillaBoilerplate(payload.comentarios);
+    const instalacion = orden.mantenimiento.instalacion;
+    const cliente = await getCliente(instalacion.idCliente);
+    payload.cliente = clienteLabel(cliente);
+    payload.numeroSerie = instalacion.numeroSerie;
+    payload.modelo = planillaModeloFromMaquina(
+      instalacion.maquina.marca,
+      instalacion.maquina.modelo
+    );
     const kind =
       planillaKind(
         orden.mantenimiento.instalacion.maquina.marca,

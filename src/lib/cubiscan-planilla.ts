@@ -132,6 +132,26 @@ export function stripPlanillaBoilerplate(value?: string | null) {
   return text;
 }
 
+export const PLANILLA_SURVEY_FIELDS = [
+  "falloResuelto",
+  "velocidadServicio",
+  "tratoIngeniero",
+  "tiempoReparacion",
+  "fechaCalificacion",
+  "horarioCalificacion",
+  "sugerencias",
+  "representanteCliente",
+] as const satisfies readonly (keyof CubiscanOrdenPayload)[];
+
+export function copyPlanillaSurveyFields(
+  target: CubiscanOrdenPayload,
+  source: CubiscanOrdenPayload
+) {
+  for (const key of PLANILLA_SURVEY_FIELDS) {
+    target[key] = source[key];
+  }
+}
+
 export function emptyCubiscanPayload(
   defaults: Partial<CubiscanOrdenPayload> = {}
 ): CubiscanOrdenPayload {
@@ -255,7 +275,7 @@ export function buildCubiscanOrdenHtml(opts: {
     .join("");
 
   const firmaIng = firmaIngeniero
-    ? `<img src="${firmaIngeniero}" alt="Firma ingeniero" style="max-width:220px;max-height:90px;border-bottom:1px solid #999" />`
+    ? `<img src="${firmaIngeniero}" alt="Firma representante" style="max-width:220px;max-height:90px;border-bottom:1px solid #999" />`
     : "<em>Sin firma</em>";
   const firmaCli = firmaCliente
     ? `<img src="${firmaCliente}" alt="Firma cliente" style="max-width:220px;max-height:90px;border-bottom:1px solid #999" />`
@@ -273,7 +293,7 @@ export function buildCubiscanOrdenHtml(opts: {
   ${esc(CUBISCAN_EMPRESA.horario)}</p>
 
   <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px">
-    <tr><td style="padding:4px 0"><strong>Ingeniero(s):</strong> ${esc(p.ingenieros || "—")}</td>
+    <tr><td style="padding:4px 0"><strong>Representante(s):</strong> ${esc(p.ingenieros || "—")}</td>
         <td style="padding:4px 0"><strong>N.º de Orden:</strong> ${esc(p.nroOrden || "—")}</td></tr>
     <tr><td style="padding:4px 0"><strong>Hora de llegada:</strong> ${esc(p.horaLlegada || "—")}</td>
         <td style="padding:4px 0"><strong>Fecha:</strong> ${esc(formatFechaAr(p.fecha))}</td></tr>
@@ -308,7 +328,7 @@ export function buildCubiscanOrdenHtml(opts: {
   <ul style="margin:0;padding-left:18px">
     <li>¿Resolvimos la falla reportada? <strong>${labelFallo(p.falloResuelto)}</strong></li>
     <li>El servicio de mantenimiento fue: <strong>${labelVel(p.velocidadServicio)}</strong></li>
-    <li>El trato del Ingeniero fue: <strong>${labelTrato(p.tratoIngeniero)}</strong></li>
+    <li>El trato del Representante fue: <strong>${labelTrato(p.tratoIngeniero)}</strong></li>
     <li>Tiempo de reparación: <strong>${esc(p.tiempoReparacion || "—")}</strong></li>
     <li>Fecha: <strong>${esc(formatFechaAr(p.fechaCalificacion))}</strong></li>
     <li>Horario: <strong>${esc(p.horarioCalificacion || "—")}</strong></li>

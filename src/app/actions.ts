@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { hashPassword, requireAdmin, requireCliente } from "@/lib/auth";
 import {
   buildCubiscanOrdenHtml,
+  copyPlanillaSurveyFields,
   emptyCubiscanPayload,
   stripPlanillaBoilerplate,
   type CubiscanOrdenPayload,
@@ -18,11 +19,21 @@ import {
   MAX_FOTOS_MANTENIMIENTO,
   readUploadedImage,
 } from "@/lib/uploads";
+import { getCliente, clienteLabel } from "@/lib/clientes";
+import {
+  calibracionModeloLabel,
+  calibracionPesoAplica,
+  extractCalibracionPeso,
+  mergePayloadWithCalibracion,
+  parseCalibracionPesoForm,
+  stripCalibracionFromPayload,
+} from "@/lib/calibracion-peso";
 import { buildNumeroSerie } from "@/lib/utils";
 import {
   checkSectionsFor,
   planillaFirmaLabel,
   planillaKind,
+  planillaModeloFromMaquina,
   planillaTitulo,
   type PlanillaKind,
 } from "@/lib/planilla-template";
@@ -825,6 +836,18 @@ function parseCubiscanPayload(formData: FormData): CubiscanOrdenPayload {
   });
 }
 
+async function applyPlanillaIdentity(
+  payload: CubiscanOrdenPayload,
+  item: Awaited<ReturnType<typeof loadCubiscanMantenimiento>>
+) {
+  const cliente = await getCliente(item.instalacion.idCliente);
+  const { marca, modelo } = item.instalacion.maquina;
+  payload.cliente = clienteLabel(cliente);
+  payload.numeroSerie = item.instalacion.numeroSerie;
+  payload.modelo = planillaModeloFromMaquina(marca, modelo);
+  return payload;
+}
+
 async function loadCubiscanMantenimiento(id: number) {
   const item = await prismaPg.clienteMantenimiento.findUnique({
     where: { id },
@@ -928,14 +951,31 @@ async function upsertCubiscanOrden(
     throw new Error("La orden ya se envió y no se puede editar");
   }
 
-  const payload = parseCubiscanPayload(formData);
+  const payload = await applyPlanillaIdentity(
+    parseCubiscanPayload(formData),
+    item
+  );
+  const existingPayload = item.ordenCubiscan?.payload
+    ? emptyCubiscanPayload(
+        item.ordenCubiscan.payload as unknown as Partial<CubiscanOrdenPayload>
+      )
+    : null;
+  if (existingPayload) {
+    copyPlanillaSurveyFields(payload, existingPayload);
+  }
+  payload.representanteCubiscan =
+    payload.representanteCubiscan ||
+    existingPayload?.representanteCubiscan ||
+    payload.ingenieros ||
+    item.asignadoA ||
+    "";
   if (
     !payload.modelo ||
     !payload.ingenieros ||
     !payload.cliente ||
     !payload.numeroSerie
   ) {
-    throw new Error("Completá modelo, ingeniero(s), cliente y nro. de serie");
+    throw new Error("Completá modelo, representante(s), cliente y nro. de serie");
   }
 
   const { firmaIngeniero, firmaCliente } = resolveFirmas(
@@ -944,10 +984,9 @@ async function upsertCubiscanOrden(
   );
   if (
     extra.requireFirmas &&
-    (!firmaIngeniero.startsWith("data:image/") ||
-      !firmaCliente.startsWith("data:image/"))
+    !firmaIngeniero.startsWith("data:image/")
   ) {
-    throw new Error("Se requieren ambas firmas digitales para enviar");
+    throw new Error("Se requiere la firma del representante para enviar");
   }
 
   const arreglado = payload.fecha
@@ -958,6 +997,11 @@ async function upsertCubiscanOrden(
     extra.emailDestino !== undefined
       ? extra.emailDestino
       : item.ordenCubiscan?.emailDestino ?? null;
+
+  const { marca, modelo } = item.instalacion.maquina;
+  const calibracionGuardada = calibracionPesoAplica(marca, modelo)
+    ? extractCalibracionPeso(item.ordenCubiscan?.payload)
+    : null;
 
   await prismaPg.$transaction([
     prismaPg.clienteMantenimiento.update({
@@ -976,15 +1020,27 @@ async function upsertCubiscanOrden(
       where: { idMantenimiento: id },
       create: {
         idMantenimiento: id,
-        payload: payload as unknown as Prisma.InputJsonValue,
+        payload: mergePayloadWithCalibracion(
+          payload as unknown as Record<string, unknown>,
+          calibracionGuardada
+        ) as unknown as Prisma.InputJsonValue,
         firmaIngeniero: firmaIngeniero || null,
-        firmaCliente: firmaCliente || null,
+        firmaCliente:
+          firmaCliente.startsWith("data:image/")
+            ? firmaCliente
+            : item.ordenCubiscan?.firmaCliente ?? null,
         emailDestino,
       },
       update: {
-        payload: payload as unknown as Prisma.InputJsonValue,
+        payload: mergePayloadWithCalibracion(
+          payload as unknown as Record<string, unknown>,
+          calibracionGuardada
+        ) as unknown as Prisma.InputJsonValue,
         firmaIngeniero: firmaIngeniero || null,
-        firmaCliente: firmaCliente || null,
+        firmaCliente:
+          firmaCliente.startsWith("data:image/")
+            ? firmaCliente
+            : item.ordenCubiscan?.firmaCliente ?? null,
         emailDestino,
       },
     }),
@@ -993,6 +1049,163 @@ async function upsertCubiscanOrden(
   await saveCubiscanFotos(id, formData);
 
   return { payload, firmaIngeniero, firmaCliente };
+}
+
+function parseSurveyPayload(formData: FormData): Partial<CubiscanOrdenPayload> {
+  const fallo = str(formData, "falloResuelto");
+  const velocidad = str(formData, "velocidadServicio");
+  const trato = str(formData, "tratoIngeniero");
+  return {
+    falloResuelto:
+      fallo === "si" || fallo === "no" || fallo === "en_proceso" ? fallo : "",
+    velocidadServicio:
+      velocidad === "rapido" || velocidad === "normal" || velocidad === "lento"
+        ? velocidad
+        : "",
+    tratoIngeniero: trato === "amable" || trato === "descortes" ? trato : "",
+    tiempoReparacion: str(formData, "tiempoReparacion"),
+    fechaCalificacion: str(formData, "fechaCalificacion"),
+    horarioCalificacion: str(formData, "horarioCalificacion"),
+    sugerencias: str(formData, "sugerencias"),
+    representanteCliente: str(formData, "representanteCliente"),
+  };
+}
+
+async function loadMantenimientoEncuestaCliente(
+  id: number,
+  clienteId: number
+) {
+  const item = await prismaPg.clienteMantenimiento.findUnique({
+    where: { id },
+    include: {
+      instalacion: { include: { maquina: true } },
+      ordenCubiscan: true,
+    },
+  });
+  if (!item) throw new Error("Trabajo no encontrado");
+  if (item.instalacion.idCliente !== clienteId) {
+    throw new Error("No autorizado");
+  }
+  const kind = planillaKind(
+    item.instalacion.maquina.marca,
+    item.instalacion.maquina.modelo
+  );
+  if (!kind) throw new Error("Este trabajo no tiene encuesta de servicio");
+  if (item.estado !== "cerrado") {
+    throw new Error("La encuesta estará disponible cuando el trabajo esté cerrado");
+  }
+  if (!item.ordenCubiscan) {
+    throw new Error("El técnico aún está preparando la orden de servicio");
+  }
+  if (item.ordenCubiscan.emailEnviadoEn) {
+    throw new Error("La orden ya fue enviada y la encuesta está cerrada");
+  }
+  return { item, kind };
+}
+
+/** Encuesta de servicio completada por el cliente en el portal. */
+export async function guardarEncuestaCliente(id: number, formData: FormData) {
+  const session = await requireCliente();
+  const { item } = await loadMantenimientoEncuestaCliente(
+    id,
+    session.clienteId!
+  );
+
+  const existing = emptyCubiscanPayload(
+    item.ordenCubiscan!.payload as unknown as Partial<CubiscanOrdenPayload>
+  );
+  const survey = parseSurveyPayload(formData);
+  Object.assign(existing, survey);
+
+  await prismaPg.cubiscanOrdenServicio.update({
+    where: { idMantenimiento: id },
+    data: {
+      payload: existing as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  touch(
+    `/portal/mantenimientos/${id}/encuesta`,
+    "/portal/historial",
+    `/mantenimientos/${id}/planilla-cubiscan`,
+    `/mantenimientos/${id}`
+  );
+  redirect(`/portal/mantenimientos/${id}/encuesta?guardado=1`);
+}
+
+async function ensureOrdenStubForCalibracion(
+  id: number,
+  item: Awaited<ReturnType<typeof loadCubiscanMantenimiento>>
+) {
+  if (item.ordenCubiscan) return item.ordenCubiscan;
+
+  const cliente = await getCliente(item.instalacion.idCliente);
+  const payload = await applyPlanillaIdentity(
+    emptyCubiscanPayload({
+      ingenieros: item.asignadoA || "",
+      nroOrden: String(id),
+      fecha:
+        item.arreglado?.toISOString().slice(0, 10) ||
+        new Date().toISOString().slice(0, 10),
+      ubicacion: item.instalacion.sitio || "",
+      representanteCubiscan: item.asignadoA || "",
+    }),
+    item
+  );
+
+  return prismaPg.cubiscanOrdenServicio.create({
+    data: {
+      idMantenimiento: id,
+      payload: payload as unknown as Prisma.InputJsonValue,
+      emailDestino: cliente?.email?.toLowerCase() || null,
+    },
+  });
+}
+
+/** Plantilla opcional de calibración de peso (CubiScan). */
+export async function guardarCalibracionPeso(id: number, formData: FormData) {
+  await requireAdmin();
+  const item = await loadCubiscanMantenimiento(id);
+  const { marca, modelo } = item.instalacion.maquina;
+  if (!calibracionPesoAplica(marca, modelo)) {
+    throw new Error("La calibración de peso solo aplica a equipos CubiScan");
+  }
+  if (item.ordenCubiscan?.emailEnviadoEn) {
+    throw new Error("La orden ya fue enviada y no se puede editar");
+  }
+
+  const orden = await ensureOrdenStubForCalibracion(id, item);
+  const calibracion = parseCalibracionPesoForm(formData);
+  calibracion.equipo = item.instalacion.numeroSerie;
+  calibracion.modeloEquipo = calibracionModeloLabel(marca, modelo);
+  const savedCalibracion = extractCalibracionPeso(orden.payload);
+  if (savedCalibracion?.firmaIngeniero && !calibracion.firmaIngeniero) {
+    calibracion.firmaIngeniero = savedCalibracion.firmaIngeniero;
+  }
+
+  const planilla = emptyCubiscanPayload(
+    stripCalibracionFromPayload(
+      (orden.payload as Record<string, unknown>) ?? {}
+    ) as Partial<CubiscanOrdenPayload>
+  );
+
+  await prismaPg.cubiscanOrdenServicio.update({
+    where: { idMantenimiento: id },
+    data: {
+      payload: mergePayloadWithCalibracion(
+        planilla as unknown as Record<string, unknown>,
+        calibracion
+      ) as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  touch(
+    `/mantenimientos/${id}`,
+    `/mantenimientos/${id}/planilla-cubiscan`,
+    `/mantenimientos/${id}/planilla-cubiscan/calibracion-peso`,
+    `/maquinas/${item.idClienteMaquina}`
+  );
+  redirect(`/mantenimientos/${id}/planilla-cubiscan/calibracion-peso?guardado=1`);
 }
 
 /** Una sola acción de formulario: guardar o enviar según `intent`. */

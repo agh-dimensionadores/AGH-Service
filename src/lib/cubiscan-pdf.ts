@@ -540,85 +540,116 @@ export function buildCubiscanOrdenPdf(opts: {
       return hy + brandH + 3;
     };
 
-    const newPageWithHeader = () => {
-      doc.addPage();
-      return drawEncabezado();
+    const metaH = isAgh ? 52 : 60;
+    const drawMetaBlock = (startY: number) => {
+      if (isAgh) {
+        const leftMetaX = M + 4;
+        fieldLine(
+          leftMetaX,
+          startY + 6,
+          "Representante(s):",
+          p.ingenieros,
+          contentW * 0.48
+        );
+        fieldLine(
+          leftMetaX,
+          startY + 18,
+          "Hora de llegada:",
+          p.horaLlegada,
+          contentW * 0.48
+        );
+        fieldLine(
+          leftMetaX,
+          startY + 30,
+          "Ubicación:",
+          p.ubicacion,
+          contentW * 0.48
+        );
+        fieldLine(
+          leftMetaX,
+          startY + 42,
+          "Contacto:",
+          p.contacto,
+          contentW * 0.48
+        );
+
+        const boxX = M + contentW * 0.52;
+        const boxW = contentW * 0.48 - 4;
+        const boxY = startY + 4;
+        drawBox(boxX, boxY, boxW, 48);
+        const rowH = 12;
+        const rows: [string, string][] = [
+          ["No. de Orden:", p.nroOrden],
+          ["Fecha:", formatFechaAr(p.fecha)],
+          ["Cliente:", p.cliente],
+          ["No. de Serie:", p.numeroSerie],
+        ];
+        rows.forEach(([lab, val], i) => {
+          const ry = boxY + 2 + i * rowH;
+          doc.font(fonts.reg).fontSize(7.5).text(lab, boxX + 3, ry);
+          doc
+            .font(fonts.bold)
+            .fontSize(7.5)
+            .text(val || "", boxX + 72, ry, { width: boxW - 76, ellipsis: true });
+          if (i < rows.length - 1) {
+            doc
+              .moveTo(boxX, ry + rowH - 1)
+              .lineTo(boxX + boxW, ry + rowH - 1)
+              .stroke("#aaa");
+          }
+        });
+      } else {
+        drawBox(M, startY, contentW, metaH);
+
+        const leftMetaX = M + 8;
+        fieldLine(leftMetaX, startY + 6, "Representante(s):", p.ingenieros, 240);
+        fieldLine(
+          leftMetaX,
+          startY + 18,
+          "Hora de llegada:",
+          p.horaLlegada,
+          240
+        );
+        fieldLine(leftMetaX, startY + 30, "Ubicación:", p.ubicacion, 240);
+        fieldLine(leftMetaX, startY + 42, "Contacto:", p.contacto, 240);
+
+        const boxX = M + contentW * 0.52;
+        const boxW = contentW * 0.48 - 6;
+        const boxY = startY + 4;
+        drawBox(boxX, boxY, boxW, metaH - 8);
+        const rowH = 11;
+        const rows: [string, string][] = [
+          ["No. de Orden:", p.nroOrden],
+          ["Fecha:", formatFechaAr(p.fecha)],
+          ["Cliente:", p.cliente],
+          ["No. de Serie:", p.numeroSerie],
+        ];
+        rows.forEach(([lab, val], i) => {
+          const ry = boxY + 2 + i * rowH;
+          doc.font(fonts.reg).fontSize(7).text(lab, boxX + 3, ry);
+          doc
+            .font(fonts.bold)
+            .fontSize(7.5)
+            .text(val || "", boxX + 72, ry, { width: boxW - 76, ellipsis: true });
+          if (i < rows.length - 1) {
+            doc
+              .moveTo(boxX, ry + rowH - 1)
+              .lineTo(boxX + boxW, ry + rowH - 1)
+              .stroke("#aaa");
+          }
+        });
+      }
+
+      return startY + metaH + 4;
     };
 
-    // ——— Title bar + brand ———
-    let y = drawEncabezado();
+    const newPageWithHeader = () => {
+      doc.addPage();
+      return drawMetaBlock(drawEncabezado());
+    };
 
-    // ——— Meta: ingeniero + caja orden ———
-    const metaH = 52;
-    if (isAgh) {
-      const leftMetaX = M + 4;
-      fieldLine(leftMetaX, y + 6, "Ingeniero(s):", p.ingenieros, contentW * 0.48);
-      fieldLine(leftMetaX, y + 18, "Hora de llegada:", p.horaLlegada, contentW * 0.48);
-      fieldLine(leftMetaX, y + 30, "Ubicación:", p.ubicacion, contentW * 0.48);
-      fieldLine(leftMetaX, y + 42, "Contacto:", p.contacto, contentW * 0.48);
-
-      const boxX = M + contentW * 0.52;
-      const boxW = contentW * 0.48 - 4;
-      const boxY = y + 4;
-      drawBox(boxX, boxY, boxW, 48);
-      const rowH = 12;
-      const rows: [string, string][] = [
-        ["No. de Orden:", p.nroOrden],
-        ["Fecha:", formatFechaAr(p.fecha)],
-        ["Cliente:", p.cliente],
-        ["No. de Serie:", p.numeroSerie],
-      ];
-      rows.forEach(([lab, val], i) => {
-        const ry = boxY + 2 + i * rowH;
-        doc.font(fonts.reg).fontSize(7.5).text(lab, boxX + 3, ry);
-        doc
-          .font(fonts.bold)
-          .fontSize(7.5)
-          .text(val || "", boxX + 72, ry, { width: boxW - 76, ellipsis: true });
-        if (i < rows.length - 1) {
-          doc
-            .moveTo(boxX, ry + rowH - 1)
-            .lineTo(boxX + boxW, ry + rowH - 1)
-            .stroke("#aaa");
-        }
-      });
-    } else {
-      drawBox(M, y, contentW, metaH);
-
-      const leftMetaX = M + 8;
-      fieldLine(leftMetaX, y + 6, "Ingeniero(s):", p.ingenieros, 240);
-      fieldLine(leftMetaX, y + 18, "Hora de llegada:", p.horaLlegada, 240);
-      fieldLine(leftMetaX, y + 30, "Ubicación:", p.ubicacion, 240);
-      fieldLine(leftMetaX, y + 42, "Contacto:", p.contacto, 240);
-
-      const boxX = M + contentW * 0.52;
-      const boxW = contentW * 0.48 - 6;
-      const boxY = y + 4;
-      drawBox(boxX, boxY, boxW, 44);
-      const rowH = 11;
-      const rows: [string, string][] = [
-        ["No. de Orden:", p.nroOrden],
-        ["Fecha:", formatFechaAr(p.fecha)],
-        ["Cliente:", p.cliente],
-        ["No. de Serie:", p.numeroSerie],
-      ];
-      rows.forEach(([lab, val], i) => {
-        const ry = boxY + 2 + i * rowH;
-        doc.font(fonts.reg).fontSize(7).text(lab, boxX + 3, ry);
-        doc
-          .font(fonts.bold)
-          .fontSize(7.5)
-          .text(val || "", boxX + 72, ry, { width: boxW - 76, ellipsis: true });
-        if (i < rows.length - 1) {
-          doc
-            .moveTo(boxX, ry + rowH - 1)
-            .lineTo(boxX + boxW, ry + rowH - 1)
-            .stroke("#aaa");
-        }
-      });
-    }
-
-    y += metaH + 4;
+    // ——— Title bar + brand + meta ———
+    let y = drawMetaBlock(drawEncabezado());
 
     // ——— Detalle ———
     y = sectionBar(y, "Detalle del servicio realizado");
@@ -969,7 +1000,7 @@ export function buildCubiscanOrdenPdf(opts: {
       y + 18
     );
     rateRow(
-      "El trato del Ingeniero fue:",
+      "El trato del Representante fue:",
       [
         { key: "a", label: "Amable", on: p.tratoIngeniero === "amable" },
         { key: "d", label: "Descortés", on: p.tratoIngeniero === "descortes" },
