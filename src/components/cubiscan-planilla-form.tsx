@@ -1,16 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { CubiscanFotosField } from "@/components/cubiscan-fotos-field";
+import { DownloadPdfButton } from "@/components/download-pdf-button";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { SignaturePad } from "@/components/signature-pad";
 import { Field, inputClass } from "@/components/ui";
 import {
-  CUBISCAN_CHECK_SECTIONS,
   CUBISCAN_EMPRESA,
   checkKey,
   type CubiscanOrdenPayload,
   type CubiscanRefaccion,
 } from "@/lib/cubiscan-planilla";
+import {
+  checkSectionsFor,
+  planillaFirmaLabel,
+  planillaTitulo,
+  type PlanillaKind,
+} from "@/lib/planilla-template";
 
 export function CubiscanPlanillaForm({
   action,
@@ -19,6 +26,10 @@ export function CubiscanPlanillaForm({
   readOnly = false,
   firmaIngeniero = "",
   firmaCliente = "",
+  mantenimientoId,
+  fotos = [],
+  kind = "cubiscan",
+  pdfHref,
 }: {
   action: (formData: FormData) => Promise<void>;
   defaults: CubiscanOrdenPayload;
@@ -26,21 +37,38 @@ export function CubiscanPlanillaForm({
   readOnly?: boolean;
   firmaIngeniero?: string;
   firmaCliente?: string;
+  mantenimientoId: number;
+  fotos?: { id: number }[];
+  kind?: PlanillaKind;
+  pdfHref?: string;
 }) {
   const [refacciones, setRefacciones] = useState<CubiscanRefaccion[]>(
     defaults.refacciones?.length
       ? defaults.refacciones.map((r) => ({
-          ...r,
-          estado: r.estado ?? "",
+          cantidad: r.cantidad ?? "",
+          numeroParte: r.numeroParte ?? "",
+          descripcion: r.descripcion ?? "",
+          estado: r.estado === "nueva" ? "nueva" : "reemplazada",
         }))
-      : [{ parte: "", cantidad: "", numeroParte: "", descripcion: "", estado: "" }]
+      : [
+          {
+            cantidad: "",
+            numeroParte: "",
+            descripcion: "",
+            estado: "reemplazada",
+          },
+        ]
   );
+
+  const sections = checkSectionsFor(kind);
+  const titulo = planillaTitulo(kind);
+  const firmaLabel = planillaFirmaLabel(kind);
 
   return (
     <GuardedForm action={action} className="space-y-6">
       <section className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-4">
         <h3 className="brand-font text-lg font-semibold text-white">
-          Orden de Servicio para Equipo CubiScan
+          {titulo}
         </h3>
         <p className="mt-2 text-sm text-[var(--ink-muted)]">
           <strong className="text-white">{CUBISCAN_EMPRESA.nombre}</strong>
@@ -183,7 +211,7 @@ export function CubiscanPlanillaForm({
           Detalle del servicio realizado
         </h3>
         <div className="space-y-4">
-          {CUBISCAN_CHECK_SECTIONS.map((section) => (
+          {sections.map((section) => (
             <div
               key={section.id}
               className="rounded-xl border border-[var(--line)] p-4"
@@ -258,28 +286,11 @@ export function CubiscanPlanillaForm({
         />
       </Field>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="flex items-center gap-2 text-sm text-white">
-          <input
-            type="checkbox"
-            name="cuboCalibracion"
-            value="true"
-            defaultChecked={defaults.cuboCalibracion}
-            disabled={readOnly}
-            className="h-4 w-4 accent-[var(--accent)]"
-          />
-          Cubo de calibración
-        </label>
-        <Field label="No. de masa">
-          <input
-            name="nroMasa"
-            defaultValue={defaults.nroMasa}
-            readOnly={readOnly}
-            placeholder="Ej. 20 kg"
-            className={inputClass}
-          />
-        </Field>
-      </div>
+      <CubiscanFotosField
+        mantenimientoId={mantenimientoId}
+        existing={fotos}
+        readOnly={readOnly}
+      />
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -294,11 +305,10 @@ export function CubiscanPlanillaForm({
                 setRefacciones((rows) => [
                   ...rows,
                   {
-                    parte: "",
                     cantidad: "",
                     numeroParte: "",
                     descripcion: "",
-                    estado: "",
+                    estado: "reemplazada",
                   },
                 ])
               }
@@ -311,25 +321,19 @@ export function CubiscanPlanillaForm({
           {refacciones.map((row, idx) => (
             <div
               key={idx}
-              className="grid gap-2 rounded-xl border border-[var(--line)] p-3 sm:grid-cols-5"
+              className="grid gap-2 rounded-xl border border-[var(--line)] p-3 sm:grid-cols-4"
             >
               <select
                 name="ref_estado"
-                defaultValue={row.estado}
+                defaultValue={
+                  row.estado === "nueva" ? "nueva" : "reemplazada"
+                }
                 disabled={readOnly}
                 className={inputClass}
               >
-                <option value="">Parte…</option>
                 <option value="reemplazada">Reemplazada</option>
                 <option value="nueva">Nueva</option>
               </select>
-              <input
-                name="ref_parte"
-                placeholder="Parte"
-                defaultValue={row.parte}
-                readOnly={readOnly}
-                className={inputClass}
-              />
               <input
                 name="ref_cantidad"
                 placeholder="Cantidad"
@@ -432,7 +436,7 @@ export function CubiscanPlanillaForm({
               className={inputClass}
             />
           </Field>
-          <Field label="Representante de CubiScan">
+          <Field label={firmaLabel}>
             <input
               name="representanteCubiscan"
               defaultValue={defaults.representanteCubiscan}
@@ -458,13 +462,13 @@ export function CubiscanPlanillaForm({
           <SignaturePad
             name="firmaCliente"
             label="Firma del cliente"
-            required
+            required={false}
             defaultValue={firmaCliente}
           />
           <SignaturePad
             name="firmaIngeniero"
-            label="Firma del ingeniero (CubiScan)"
-            required
+            label={`Firma del ingeniero (${kind === "agh" ? "AGH" : "CubiScan"})`}
+            required={false}
             defaultValue={firmaIngeniero}
           />
         </section>
@@ -505,24 +509,50 @@ export function CubiscanPlanillaForm({
 
       {!readOnly ? (
         <section className="grid gap-4 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4 sm:grid-cols-[1fr_auto] sm:items-end">
-          <Field label="Email del cliente (envío de la orden) *">
+          <input type="hidden" name="intent" value="guardar" />
+          <Field label="Email del cliente">
             <input
               name="emailDestino"
               type="email"
-              required
               defaultValue={emailDefault}
               className={inputClass}
+              placeholder="cliente@empresa.com"
             />
           </Field>
-          <SubmitButton pendingLabel="Cerrando y enviando…">
-            Cerrar, firmar y enviar
+          <SubmitButton
+            className="btn-ghost"
+            pendingLabel="Guardando…"
+            onBeforeSubmit={(form) => {
+              const input = form.elements.namedItem("intent");
+              if (input instanceof HTMLInputElement) input.value = "guardar";
+            }}
+          >
+            Guardar planilla
           </SubmitButton>
           <p className="sm:col-span-2 text-xs text-[var(--ink-muted)]">
-            Guarda la planilla, cierra el trabajo y manda la orden al correo del
-            cliente (con firmas).
+            Podés guardar y seguir editando las veces que quieras. Al enviar el
+            mail la orden queda bloqueada (solo reenvío y descarga del PDF).
+            El envío pide ambas firmas y un email válido.
           </p>
         </section>
       ) : null}
+
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        {pdfHref ? (
+          <DownloadPdfButton href={pdfHref}>Descargar PDF</DownloadPdfButton>
+        ) : null}
+        {!readOnly ? (
+          <SubmitButton
+            pendingLabel="Enviando…"
+            onBeforeSubmit={(form) => {
+              const input = form.elements.namedItem("intent");
+              if (input instanceof HTMLInputElement) input.value = "enviar";
+            }}
+          >
+            Enviar mail
+          </SubmitButton>
+        ) : null}
+      </div>
     </GuardedForm>
   );
 }

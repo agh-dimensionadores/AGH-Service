@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireCliente } from "@/lib/auth";
 import { prismaPg } from "@/lib/prisma";
+import { MachineThumb } from "@/components/machine-thumb";
 import {
   Badge,
   PageHeader,
@@ -61,6 +62,11 @@ export default async function PortalMaquinaPage({
           <h3 className="brand-font mb-4 text-lg font-semibold text-white">
             Datos de la máquina
           </h3>
+          <MachineThumb
+            maquina={unidad.maquina}
+            alt={machineName(unidad)}
+            className="mb-4 machine-thumb object-cover"
+          />
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Estado</dt>

@@ -14,7 +14,7 @@ import {
   getCliente,
   clienteLabel,
 } from "@/lib/clientes";
-import { catalogImageUrl } from "@/lib/uploads";
+import { MachineThumb } from "@/components/machine-thumb";
 import {
   Badge,
   EmptyState,
@@ -30,7 +30,6 @@ import {
   formatDate,
   labelEstado,
   machineName,
-  machineThumbStyle,
   mantenimientoTitulo,
 } from "@/lib/utils";
 
@@ -122,24 +121,11 @@ export default async function MaquinaDetallePage({
             <h3 className="brand-font mb-4 text-lg font-semibold text-white">
               Datos del equipo
             </h3>
-            {unidad.maquina.imagenMime ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={catalogImageUrl(
-                  unidad.maquina.idmachine,
-                  unidad.maquina.imagenUpdatedAt
-                )}
-                alt={machineName(unidad)}
-                className="mb-4 machine-thumb object-cover"
-              />
-            ) : (
-              <div
-                className="mb-4 machine-thumb"
-                style={machineThumbStyle(
-                  unidad.maquina.modelo ?? unidad.maquina.marca
-                )}
-              />
-            )}
+            <MachineThumb
+              maquina={unidad.maquina}
+              alt={machineName(unidad)}
+              className="mb-4 machine-thumb object-cover"
+            />
             <GuardedForm action={update} className="grid gap-4">
               <Field label="Modelo del catálogo *">
                 <select

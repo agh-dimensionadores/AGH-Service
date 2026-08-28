@@ -1,4 +1,6 @@
 const MAX_BYTES = 5 * 1024 * 1024;
+export const MAX_FOTO_MANTENIMIENTO_BYTES = 2 * 1024 * 1024;
+export const MAX_FOTOS_MANTENIMIENTO = 6;
 
 export type UploadedImage = {
   bytes: Uint8Array;
@@ -52,12 +54,15 @@ function detectMime(bytes: Uint8Array, fallback: string): string | null {
 
 /** Lee una imagen del form para guardarla en PostgreSQL (BYTEA). */
 export async function readUploadedImage(
-  file: File | null
+  file: File | null,
+  maxBytes = MAX_BYTES
 ): Promise<UploadedImage | null> {
   if (!file || file.size === 0) return null;
 
-  if (file.size > MAX_BYTES) {
-    throw new Error("La imagen no puede superar 5 MB");
+  if (file.size > maxBytes) {
+    throw new Error(
+      `La imagen no puede superar ${Math.round(maxBytes / (1024 * 1024))} MB`
+    );
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());

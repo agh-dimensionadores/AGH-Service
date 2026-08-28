@@ -2,13 +2,23 @@ import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
 import {
-  CUBISCAN_CHECK_SECTIONS,
   CUBISCAN_EMPRESA,
   checkKey,
   formatFechaAr,
   type CubiscanCheckSection,
   type CubiscanOrdenPayload,
 } from "@/lib/cubiscan-planilla";
+import {
+  CUBISCAN_IMAGE_FILES,
+  cubiscanModeloNumero,
+} from "@/lib/maquina-images";
+import {
+  aghModeloCode,
+  checkSectionsFor,
+  planillaFirmaLabel,
+  planillaTitulo,
+  type PlanillaKind,
+} from "@/lib/planilla-template";
 
 function dataUrlToBuffer(dataUrl?: string | null) {
   if (!dataUrl) return null;
@@ -27,38 +37,64 @@ function isChecked(val: string | boolean | undefined) {
 
 function logoPath(...names: string[]) {
   for (const name of names) {
-    const full = path.join(process.cwd(), "assets", name);
+    const inAssets = path.join(process.cwd(), "assets", name);
+    if (fs.existsSync(inAssets)) return inAssets;
+    const inPublic = path.join(process.cwd(), "public", name);
+    if (fs.existsSync(inPublic)) return inPublic;
+  }
+  return null;
+}
+
+function maquinaFile(...names: string[]) {
+  const dir = path.join(process.cwd(), "assets", "maquinas");
+  for (const name of names) {
+    const full = path.join(dir, name);
     if (fs.existsSync(full)) return full;
   }
   return null;
 }
 
-/** Foto chica del modelo según el texto de "Modelo" de la planilla. */
-function resolveMaquinaImage(modelo: string) {
-  const key = (modelo || "").toLowerCase().replace(/\s+/g, "");
-  const dir = path.join(process.cwd(), "assets", "maquinas");
-  if (!fs.existsSync(dir)) return null;
-
-  const preferred: { test: RegExp; files: string[] }[] = [
-    {
-      test: /100|150/,
-      files: ["cubiscan100-pdf.png", "cubiscan100.png"],
-    },
-  ];
-
-  for (const rule of preferred) {
-    if (!rule.test.test(key) && !rule.test.test(modelo || "")) continue;
-    for (const file of rule.files) {
-      const full = path.join(dir, file);
-      if (fs.existsSync(full)) return full;
+/** Foto del modelo: cubiscan{número} o maquinaodc / maquinapdl. */
+function resolveMaquinaImage(modelo: string, kind: PlanillaKind) {
+  if (kind === "agh") {
+    const code = aghModeloCode(undefined, modelo);
+    if (code === "ODC") {
+      return maquinaFile("maquinaodc.png", "maquinaodc.jpg", "maquinaodc.webp");
     }
+    return maquinaFile(
+      "maquinapdl.png",
+      "maquinapdl.jpg",
+      "maquinapdl.webp",
+      "maquinapdc.png",
+      "maquinapdc.jpg"
+    );
   }
 
-  // Fallback: primer archivo del directorio
-  const any = fs
-    .readdirSync(dir)
-    .find((f) => /\.(png|jpe?g|webp)$/i.test(f));
-  return any ? path.join(dir, any) : null;
+  const n = cubiscanModeloNumero(undefined, modelo);
+  if (!n) return null;
+  const mapped = CUBISCAN_IMAGE_FILES[n];
+  const candidates = [`cubiscan${n}-pdf.png`, mapped, `cubiscan${n}.png`].filter(
+    (f, i, arr): f is string => Boolean(f) && arr.indexOf(f) === i
+  );
+  return maquinaFile(...candidates);
+}
+
+function drawLines(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  x: number,
+  startY: number,
+  lineHeight: number
+) {
+  doc.font("Helvetica").fontSize(8).fillColor("#000");
+  let ty = startY;
+  for (const line of text.split("\n")) {
+    doc.text(line.length ? line : " ", x, ty, {
+      lineBreak: false,
+      continued: false,
+    });
+    ty += lineHeight;
+  }
 }
 
 function tryImage(
@@ -66,38 +102,116 @@ function tryImage(
   file: string | null,
   x: number,
   y: number,
-  fit: [number, number]
+  fit: [number, number],
+  align?: "left" | "center" | "right"
 ) {
   if (!file) return false;
   try {
-    doc.image(file, x, y, { fit });
+    doc.image(file, x, y, {
+      fit,
+      align: align ?? "left",
+      valign: "center",
+    });
     return true;
   } catch {
     return false;
   }
 }
 
-/** PDF con el layout de la planilla impresa CubiScan / Logintec. */
+/** Parte el texto para que entre en `maxHeight` (el resto va a la hoja siguiente). */
+function splitTextToHeight(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  width: number,
+  maxHeight: number
+): { fitted: string; rest: string } {
+  const raw = (text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!raw.trim()) return { fitted: "", rest: "" };
+
+  doc.font("Helvetica").fontSize(8);
+  const lineHeight = Math.max(doc.currentLineHeight(), 10);
+  const maxLines = Math.max(1, Math.floor(Math.max(lineHeight, maxHeight) / lineHeight));
+
+  const lines: string[] = [];
+  for (const para of raw.split("\n")) {
+    if (!para.trim()) {
+      lines.push("");
+      continue;
+    }
+    const words = para.split(/\s+/).filter(Boolean);
+    let line = "";
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word;
+      if (doc.widthOfString(next) <= width) {
+        line = next;
+        continue;
+      }
+      if (line) lines.push(line);
+      if (doc.widthOfString(word) <= width) {
+        line = word;
+        continue;
+      }
+      // Palabra más ancha que la caja: cortar por caracteres para no colgar PDFKit.
+      let chunk = "";
+      for (const ch of word) {
+        const trial = chunk + ch;
+        if (doc.widthOfString(trial) <= width) {
+          chunk = trial;
+        } else {
+          if (chunk) lines.push(chunk);
+          chunk = ch;
+        }
+      }
+      line = chunk;
+    }
+    if (line) lines.push(line);
+  }
+
+  const fitted = lines.slice(0, maxLines).join("\n");
+  const rest = lines.slice(maxLines).join("\n");
+  if (rest.trim() && !fitted.trim() && lines.length) {
+    return { fitted: lines[0], rest: lines.slice(1).join("\n") };
+  }
+  return { fitted, rest };
+}
+
+/** PDF con el layout de la planilla impresa CubiScan / AGH Dimensionadores. */
 export function buildCubiscanOrdenPdf(opts: {
   payload: CubiscanOrdenPayload;
   firmaIngeniero?: string | null;
   firmaCliente?: string | null;
+  fotos?: Buffer[];
+  kind?: PlanillaKind;
 }): Promise<Buffer> {
-  const { payload: p, firmaIngeniero, firmaCliente } = opts;
+  const { payload: p, firmaIngeniero, firmaCliente, fotos = [], kind = "cubiscan" } =
+    opts;
+  const isAgh = kind === "agh";
+  const titulo = planillaTitulo(kind);
+  const firmaLabel = planillaFirmaLabel(kind);
+  const sections = checkSectionsFor(kind);
   const cubiscanLogo = logoPath("logocubiscan2-pdf.png", "logocubiscan2.png");
-  const logintecLogo = logoPath(
-    "logologintec-black.png",
-    "logologintec.png"
+  const logintecLogo = logoPath("logo.png");
+  const montraLogo = logoPath("logomontra.png", "logomontra-pdf.png");
+  const aghLogo = logoPath(
+    "logoagh.png",
+    "logoagh.jpg",
+    "logoagh.webp",
+    "agh-logo.png"
   );
-  const montraLogo = logoPath("logomontra-pdf.png", "logomontra.png");
-  const maquinaImg = resolveMaquinaImage(p.modelo);
+  const maquinaImg = resolveMaquinaImage(p.modelo, kind);
+  const productLogo =
+    isAgh && aghModeloCode(undefined, p.modelo) === "ODC"
+      ? maquinaFile("logoodc-black.png", "logoodc.png")
+      : isAgh
+        ? maquinaFile("logopdc-black.png", "logopdc.png")
+        : null;
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: "A4",
       margin: 0,
       info: {
-        Title: `Orden de Servicio CubiScan ${p.nroOrden || ""}`.trim(),
+        Title: `${titulo} ${p.nroOrden || ""}`.trim(),
         Author: CUBISCAN_EMPRESA.nombre,
       },
     });
@@ -170,95 +284,229 @@ export function buildCubiscanOrdenPdf(opts: {
       doc.font("Helvetica");
     };
 
-    // ——— Title bar ———
-    let y = M;
-    drawBox(M, y, contentW, 26, gray);
-    doc
-      .fillColor("#fff")
-      .font("Helvetica-Bold")
-      .fontSize(10.5)
-      .text("Orden de Servicio para Equipo CubiScan", M + 8, y + 4, {
-        width: contentW * 0.58,
-      });
-    doc
-      .fontSize(8.5)
-      .text(`Modelo ${p.modelo || "CubiScan"}`, M + contentW * 0.55, y + 7, {
-        width: contentW * 0.43,
-        align: "right",
-      });
-    doc.fillColor("#000");
-    y += 30;
+    const pageBottom = () => H - M;
 
-    // ——— Brand row: logos + machine + company ———
-    const brandH = 52;
-    drawBox(M, y, contentW, brandH);
+    const drawEncabezado = () => {
+      let hy = M;
+      if (isAgh) {
+        drawBox(M, hy, contentW, 18, "#1a1a1a");
+        doc
+          .fillColor("#fff")
+          .font("Helvetica-Bold")
+          .fontSize(10)
+          .text(titulo, M + 6, hy + 4.5, { width: contentW - 12, align: "center" });
+        doc.fillColor("#000");
+        hy += 18;
+        drawBox(M, hy, contentW, 16, lightGray);
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(10)
+          .text(`Modelo ${p.modelo || "PDC"}`, M, hy + 3.5, {
+            width: contentW,
+            align: "center",
+          });
+        hy += 18;
 
-    // CubiScan (izq)
-    if (
-      !tryImage(doc, cubiscanLogo, M + 6, y + 10, [118, 32])
-    ) {
-      doc.font("Helvetica-Bold").fontSize(11).text("CUBISCAN", M + 8, y + 18);
-    }
+        const brandH = 100;
+        drawBox(M, hy, contentW, brandH);
 
-    // Foto del equipo (junto al logo CubiScan)
-    const machineX = M + 130;
-    drawBox(machineX, y + 5, 42, 42);
-    if (
-      !tryImage(doc, maquinaImg, machineX + 2, y + 7, [38, 38])
-    ) {
+        const aghW = 96;
+        const aghH = 72;
+        const leftX = M + 52;
+        const aghY = hy + (brandH - aghH) / 2;
+        if (!tryImage(doc, aghLogo, leftX, aghY, [aghW, aghH], "center")) {
+          doc
+            .font("Helvetica-Bold")
+            .fontSize(9)
+            .text("AGH\nDIMENSIONADORES", leftX, hy + 32, {
+              width: aghW,
+              align: "center",
+            });
+        }
+
+        const machineSize = 90;
+        const machineX = M + contentW - 1 - machineSize;
+        const machineY = hy + (brandH - machineSize) / 2;
+
+        const prodW = 82;
+        const prodH = 30;
+        const prodX = machineX - 6 - prodW;
+        const prodY = hy + (brandH - prodH) / 2;
+        if (!tryImage(doc, productLogo, prodX, prodY, [prodW, prodH], "center")) {
+          const code = aghModeloCode(undefined, p.modelo) || "PDC";
+          doc
+            .font("Helvetica-Bold")
+            .fontSize(11)
+            .fillColor("#000")
+            .text(code, prodX, hy + 42, { width: prodW, align: "center" });
+        }
+
+        if (
+          !tryImage(doc, maquinaImg, machineX, machineY, [
+            machineSize,
+            machineSize,
+          ])
+        ) {
+          doc
+            .font("Helvetica")
+            .fontSize(6)
+            .fillColor("#888")
+            .text("foto", machineX + 30, hy + 46);
+          doc.fillColor("#000");
+        }
+
+        const logiBlockW = 250;
+        const logiBlockX = M + (contentW - logiBlockW) / 2;
+        if (
+          !tryImage(
+            doc,
+            logintecLogo,
+            logiBlockX,
+            hy + 8,
+            [logiBlockW, 28],
+            "center"
+          )
+        ) {
+          doc
+            .font("Helvetica-Bold")
+            .fontSize(10)
+            .text("Logintec", logiBlockX, hy + 12, {
+              width: logiBlockW,
+              align: "center",
+            });
+        }
+        doc.font("Helvetica").fontSize(6.5).fillColor("#000");
+        doc.text(CUBISCAN_EMPRESA.nombre, logiBlockX, hy + 42, {
+          width: logiBlockW,
+          align: "center",
+        });
+        doc.text(CUBISCAN_EMPRESA.direccion, logiBlockX, hy + 52, {
+          width: logiBlockW,
+          align: "center",
+        });
+        doc.text(
+          `${CUBISCAN_EMPRESA.telefono}   ${CUBISCAN_EMPRESA.web}`,
+          logiBlockX,
+          hy + 62,
+          { width: logiBlockW, align: "center" }
+        );
+        doc.text(CUBISCAN_EMPRESA.horario, logiBlockX, hy + 72, {
+          width: logiBlockW,
+          align: "center",
+        });
+
+        return hy + brandH + 3;
+      }
+
+      drawBox(M, hy, contentW, 26, gray);
       doc
-        .font("Helvetica")
-        .fontSize(6)
-        .fillColor("#888")
-        .text("foto", machineX + 10, y + 22);
+        .fillColor("#fff")
+        .font("Helvetica-Bold")
+        .fontSize(10.5)
+        .text(titulo, M + 8, hy + 4, {
+          width: contentW * 0.58,
+        });
+      doc
+        .fontSize(8.5)
+        .text(`Modelo ${p.modelo || "CubiScan"}`, M + contentW * 0.55, hy + 7, {
+          width: contentW * 0.43,
+          align: "right",
+        });
       doc.fillColor("#000");
-    }
+      hy += 30;
 
-    // Datos Logintec (centro)
-    const cx = M + 182;
-    const cW = contentW - 182 - 130;
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(8.5)
-      .fillColor("#000")
-      .text(CUBISCAN_EMPRESA.nombre, cx, y + 5, {
-        width: cW,
-        align: "center",
-      });
-    doc.font("Helvetica").fontSize(6);
-    doc.text(CUBISCAN_EMPRESA.direccion, cx, y + 16, {
-      width: cW,
-      align: "center",
-    });
-    doc.text(CUBISCAN_EMPRESA.telefono, cx, y + 25, {
-      width: cW,
-      align: "center",
-    });
-    doc.text(
-      `${CUBISCAN_EMPRESA.web}  ·  ${CUBISCAN_EMPRESA.horario}`,
-      cx,
-      y + 34,
-      { width: cW, align: "center" }
-    );
+      const brandH = 78;
+      drawBox(M, hy, contentW, brandH);
 
-    // Montra + Logintec (derecha, apilados)
-    const rightX = M + contentW - 122;
-    if (!tryImage(doc, montraLogo, rightX + 20, y + 4, [90, 18])) {
+      const leftX = M + 8;
+      const cubiW = 102;
+      const cubiH = 24;
+      if (!tryImage(doc, cubiscanLogo, leftX, hy + 8, [cubiW, cubiH])) {
+        doc.font("Helvetica-Bold").fontSize(11).text("CUBISCAN", leftX, hy + 12);
+      }
+      const montraW = 64;
+      const montraH = 20;
+      if (
+        !tryImage(
+          doc,
+          montraLogo,
+          leftX + 8,
+          hy + 8 + cubiH + 6,
+          [montraW, montraH]
+        )
+      ) {
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(8)
+          .text("Montra", leftX, hy + 42, { width: cubiW });
+      }
+
+      const machineSize = 64;
+      const machineX = leftX + cubiW + 8;
+      const machineY = hy + (brandH - machineSize) / 2 + 6;
+      if (
+        !tryImage(doc, maquinaImg, machineX, machineY, [
+          machineSize,
+          machineSize,
+        ])
+      ) {
+        doc
+          .font("Helvetica")
+          .fontSize(6)
+          .fillColor("#888")
+          .text("foto", machineX + 20, hy + 42);
+        doc.fillColor("#000");
+      }
+
+      const logiW = 108;
+      const logiH = 29;
+      const rightPad = 36;
+      const rightX = M + contentW - rightPad - logiW;
+      const logiY = hy + (brandH - logiH) / 2;
+      if (!tryImage(doc, logintecLogo, rightX, logiY, [logiW, logiH])) {
+        doc
+          .font("Helvetica-Bold")
+          .fontSize(8)
+          .text("Logintec", rightX, logiY + 2, {
+            width: logiW,
+            align: "center",
+          });
+      }
+
       doc
         .font("Helvetica-Bold")
         .fontSize(8)
-        .text("Montra", rightX + 30, y + 6, { width: 90, align: "center" });
-    }
-    if (
-      !tryImage(doc, logintecLogo, rightX, y + 24, [118, 24])
-    ) {
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(10)
-        .text("Logintec", rightX + 20, y + 28, { width: 90, align: "center" });
-    }
+        .fillColor("#000")
+        .text(CUBISCAN_EMPRESA.nombre, M, hy + 14, {
+          width: contentW,
+          align: "center",
+        });
+      doc.font("Helvetica").fontSize(6);
+      doc.text(CUBISCAN_EMPRESA.direccion, M, hy + 26, {
+        width: contentW,
+        align: "center",
+      });
+      doc.text(CUBISCAN_EMPRESA.telefono, M, hy + 36, {
+        width: contentW,
+        align: "center",
+      });
+      doc.text(
+        `${CUBISCAN_EMPRESA.web}  ·  ${CUBISCAN_EMPRESA.horario}`,
+        M,
+        hy + 46,
+        { width: contentW, align: "center" }
+      );
 
-    y += brandH + 3;
+      return hy + brandH + 3;
+    };
+
+    const newPageWithHeader = () => {
+      doc.addPage();
+      return drawEncabezado();
+    };
+
+    // ——— Title bar + brand ———
+    let y = drawEncabezado();
 
     // ——— Meta: ingeniero + caja orden ———
     const metaH = 52;
@@ -324,10 +572,10 @@ export function buildCubiscanOrdenPdf(opts: {
     y += 16;
 
     // Two-column checklist
-    const leftSecs = CUBISCAN_CHECK_SECTIONS.filter((s) =>
+    const leftSecs = sections.filter((s) =>
       ["estructura", "energia", "cargador"].includes(s.id)
     );
-    const rightSecs = CUBISCAN_CHECK_SECTIONS.filter((s) =>
+    const rightSecs = sections.filter((s) =>
       ["limpieza", "calibracion"].includes(s.id)
     );
     const colW = (contentW - 10) / 2;
@@ -387,35 +635,123 @@ export function buildCubiscanOrdenPdf(opts: {
     const rightEnd = drawSections(rightSecs, checkRightX, checkStartY);
     y = Math.max(leftEnd, rightEnd) + 2;
 
-    // ——— Comentarios ———
-    y = sectionBar(y, "Comentarios/Notas");
-    const notesH = 42;
-    drawBox(M, y, contentW, notesH, "#fafafa");
-    doc.font("Helvetica").fontSize(8).text(p.comentarios || "", M + 5, y + 4, {
-      width: contentW - 10,
-      height: notesH - 8,
-    });
-    y += notesH + 3;
+    const ensureSpace = (minH: number) => {
+      if (y + minH > pageBottom()) {
+        y = newPageWithHeader();
+      }
+    };
 
-    checkbox(M + 4, y, p.cuboCalibracion, 7);
-    doc.font("Helvetica").fontSize(7.5).text("Cubo de calibración", M + 14, y);
-    doc.text("No. de masa:", M + 130, y);
-    doc
-      .moveTo(M + 185, y + 8)
-      .lineTo(M + 280, y + 8)
-      .stroke("#444");
-    if (p.nroMasa) {
-      doc.font("Helvetica-Bold").text(p.nroMasa, M + 188, y);
+    // ——— Comentarios: caja del tamaño del texto; si no entra, sigue en la otra hoja ———
+    const commentsText = (p.comentarios || "").trim();
+    const textW = contentW - 10;
+    const barH = 15;
+    const lineH = 10;
+
+    const drawNotesBox = (title: string, body: string, boxH: number) => {
+      y = sectionBar(y, title);
+      drawBox(M, y, contentW, boxH, "#fafafa");
+      if (body) {
+        drawLines(doc, body, M + 5, y + 5, lineH);
+      }
+      y += boxH + 3;
+    };
+
+    if (!commentsText) {
+      drawNotesBox("Comentarios/Notas", "", 36);
+    } else {
+      let remaining = commentsText;
+      let title = "Comentarios/Notas";
+      let pages = 0;
+      while (remaining && pages < 12) {
+        pages += 1;
+        ensureSpace(barH + 48);
+        const available = Math.max(36, pageBottom() - y - barH - 6);
+        const { fitted, rest } = splitTextToHeight(
+          doc,
+          remaining,
+          textW,
+          Math.max(lineH, available - 12)
+        );
+        const chunk = fitted.trim() ? fitted : remaining.slice(0, 180);
+        const leftover = (fitted.trim() ? rest : remaining.slice(chunk.length)).trim();
+        const linesN = Math.max(1, chunk.split("\n").length);
+        const notesH = leftover
+          ? available
+          : Math.max(36, linesN * lineH + 12);
+        drawNotesBox(title, chunk, notesH);
+        if (!leftover || leftover === remaining.trim()) break;
+        remaining = leftover;
+        title = "Comentarios/Notas (continuación)";
+        y = newPageWithHeader();
+      }
     }
-    y += 14;
+
+    if (fotos.length) {
+      const drawFoto = (
+        buf: Buffer,
+        x: number,
+        fy: number,
+        w: number,
+        h: number
+      ) => {
+        try {
+          doc.image(buf, x, fy, {
+            fit: [w, h],
+            align: "center",
+            valign: "center",
+          });
+        } catch {
+          doc.rect(x, fy, w, h).stroke("#ccc");
+        }
+      };
+
+      const startFotosPage = () => {
+        y = newPageWithHeader();
+        y = sectionBar(y, "Fotos del mantenimiento realizado");
+        y += 8;
+      };
+
+      if (pageBottom() - y < 140) {
+        startFotosPage();
+      } else {
+        y = sectionBar(y, "Fotos del mantenimiento realizado");
+        y += 8;
+      }
+
+      if (fotos.length === 1) {
+        const maxW = contentW * 0.82;
+        const maxH = Math.min(340, pageBottom() - y - 8);
+        const x = M + (contentW - maxW) / 2;
+        drawFoto(fotos[0], x, y, maxW, maxH);
+        y += maxH + 10;
+      } else {
+        const fotoCols = 3;
+        const gap = 10;
+        const cellW = (contentW - gap * (fotoCols - 1)) / fotoCols;
+        const cellH = cellW * 1.05;
+        fotos.forEach((buf, i) => {
+          if (i > 0 && i % fotoCols === 0) {
+            y += cellH + gap;
+          }
+          if (i % fotoCols === 0 && y + cellH > pageBottom()) {
+            startFotosPage();
+          }
+          const col = i % fotoCols;
+          const x = M + col * (cellW + gap);
+          drawFoto(buf, x, y, cellW, cellH);
+        });
+        y += cellH + 10;
+      }
+    }
 
     // ——— Refacciones ———
+    ensureSpace(80);
     y = sectionBar(y, "Refacciones Reemplazadas / Requerimiento de reemplazo");
     const cols = [
-      { title: "Partes", w: contentW * 0.28 },
-      { title: "Cantidad", w: contentW * 0.12 },
-      { title: "Número de parte", w: contentW * 0.22 },
-      { title: "Descripción", w: contentW * 0.38 },
+      { title: "Reemplazada / Nueva", w: contentW * 0.28 },
+      { title: "Cantidad", w: contentW * 0.14 },
+      { title: "Número de parte", w: contentW * 0.24 },
+      { title: "Descripción", w: contentW * 0.34 },
     ];
     const headY = y;
     let hx = M;
@@ -432,25 +768,20 @@ export function buildCubiscanOrdenPdf(opts: {
     const refs = [...(p.refacciones ?? [])];
     while (refs.length < 3) {
       refs.push({
-        parte: "",
         cantidad: "",
         numeroParte: "",
         descripcion: "",
-        estado: "",
+        estado: "reemplazada",
       });
     }
     for (const r of refs.slice(0, 4)) {
       const ry = y;
       drawBox(M, ry, contentW, 16);
       let rx = M;
-      // Partes with mini checks
-      checkbox(rx + 3, ry + 4, r.estado === "reemplazada", 6);
-      doc.font("Helvetica").fontSize(5.5).text("Reempl.", rx + 11, ry + 4);
-      checkbox(rx + 48, ry + 4, r.estado === "nueva", 6);
-      doc.text("Nueva", rx + 56, ry + 4);
-      if (r.parte) {
-        doc.fontSize(7).text(r.parte, rx + 3, ry + 9, { width: cols[0].w - 6 });
-      }
+      checkbox(rx + 3, ry + 4, Boolean(r.cantidad || r.numeroParte || r.descripcion) && r.estado === "reemplazada", 6);
+      doc.font("Helvetica").fontSize(6.5).text("Reemplazada", rx + 12, ry + 4);
+      checkbox(rx + 78, ry + 4, Boolean(r.cantidad || r.numeroParte || r.descripcion) && r.estado === "nueva", 6);
+      doc.text("Nueva", rx + 87, ry + 4);
       rx += cols[0].w;
       doc.fontSize(7).text(r.cantidad, rx + 3, ry + 4, { width: cols[1].w - 6 });
       rx += cols[1].w;
@@ -462,6 +793,7 @@ export function buildCubiscanOrdenPdf(opts: {
     y += 4;
 
     // ——— Calificación ———
+    ensureSpace(90);
     y = sectionBar(
       y,
       "Califique nuestro servicio, nos interesa su opinión"
@@ -556,7 +888,10 @@ export function buildCubiscanOrdenPdf(opts: {
     y += 16;
 
     // ——— Firmas ———
-    const sigH = Math.min(78, H - y - M - 4);
+    if (H - y - M < 90) {
+      y = newPageWithHeader();
+    }
+    const sigH = Math.max(56, Math.min(78, H - y - M - 4));
     const sigW = (contentW - 10) / 2;
     drawBox(M, y, sigW, sigH);
     drawBox(M + sigW + 10, y, sigW, sigH);
@@ -587,7 +922,7 @@ export function buildCubiscanOrdenPdf(opts: {
     doc
       .font("Helvetica")
       .fontSize(7)
-      .text("Representante de Cubiscan", M + sigW + 14, y + 4, {
+      .text(firmaLabel, M + sigW + 14, y + 4, {
         width: sigW - 8,
       });
     const repName = p.representanteCubiscan || p.ingenieros;

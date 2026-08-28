@@ -5,7 +5,7 @@ import {
 } from "@/app/actions";
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
 import { prismaPg } from "@/lib/prisma";
-import { catalogImageUrl } from "@/lib/uploads";
+import { MachineThumb } from "@/components/machine-thumb";
 import {
   Field,
   PageHeader,
@@ -13,7 +13,6 @@ import {
   SecondaryLink,
   inputClass,
 } from "@/components/ui";
-import { machineThumbStyle } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +47,7 @@ export default async function EditarCatalogoMaquinaPage({
     <div>
       <PageHeader
         title={`Editar ${item.marca} ${item.modelo ?? ""}`.trim()}
-        description="Actualizá marca, modelo o foto del catálogo (PostgreSQL)."
+        description="Actualizá marca y modelo. CubiScan 100, 110, 150, 200 y 325 usan la foto cubiscan de ese número."
         action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
       />
 
@@ -58,20 +57,11 @@ export default async function EditarCatalogoMaquinaPage({
             Cambios guardados.
           </p>
         ) : null}
-        {item.imagenMime ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={`${item.idmachine}-${item.imagenUpdatedAt?.getTime() ?? 0}`}
-            src={catalogImageUrl(item.idmachine, item.imagenUpdatedAt)}
-            alt={`${item.marca} ${item.modelo ?? ""}`}
-            className="mb-4 machine-thumb object-cover"
-          />
-        ) : (
-          <div
-            className="mb-4 machine-thumb"
-            style={machineThumbStyle(item.modelo ?? item.marca)}
-          />
-        )}
+        <MachineThumb
+          maquina={item}
+          alt={`${item.marca} ${item.modelo ?? ""}`}
+          className="mb-4 machine-thumb object-cover"
+        />
 
         <GuardedForm action={update} className="grid gap-4">
           <Field label="Marca *">
@@ -87,10 +77,15 @@ export default async function EditarCatalogoMaquinaPage({
               name="modelo"
               defaultValue={item.modelo ?? ""}
               className={inputClass}
-              placeholder="ODC, PDC, PDL, CLD-100..."
+              placeholder="100, 110, 150, ODC, PDC…"
               list="modelos-agh"
             />
             <datalist id="modelos-agh">
+              <option value="100" />
+              <option value="110" />
+              <option value="150" />
+              <option value="200" />
+              <option value="325" />
               <option value="ODC" />
               <option value="PDC" />
               <option value="PDL" />

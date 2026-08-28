@@ -5,6 +5,7 @@ import {
   type CubiscanOrdenPayload,
 } from "@/lib/cubiscan-planilla";
 import { prismaPg } from "@/lib/prisma";
+import { planillaKind } from "@/lib/planilla-template";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,12 @@ export async function GET(
 
     const orden = await prismaPg.cubiscanOrdenServicio.findUnique({
       where: { idMantenimiento: id },
+      include: {
+        fotos: { orderBy: { orden: "asc" } },
+        mantenimiento: {
+          include: { instalacion: { include: { maquina: true } } },
+        },
+      },
     });
     if (!orden) {
       return NextResponse.json(
@@ -39,14 +46,33 @@ export async function GET(
     const payload = emptyCubiscanPayload(
       orden.payload as unknown as Partial<CubiscanOrdenPayload>
     );
-    const pdf = await buildCubiscanOrdenPdf({
-      payload,
-      firmaIngeniero: orden.firmaIngeniero,
-      firmaCliente: orden.firmaCliente,
-    });
+    const kind =
+      planillaKind(
+        orden.mantenimiento.instalacion.maquina.marca,
+        orden.mantenimiento.instalacion.maquina.modelo
+      ) ?? "cubiscan";
+    const fotos = (orden.fotos ?? []).map((f) => Buffer.from(f.imagen));
+    const pdf = await Promise.race([
+      buildCubiscanOrdenPdf({
+        payload,
+        firmaIngeniero: orden.firmaIngeniero,
+        firmaCliente: orden.firmaCliente,
+        fotos,
+        kind,
+      }),
+      new Promise<Buffer>((_, reject) => {
+        setTimeout(
+          () => reject(new Error("Tiempo agotado generando el PDF")),
+          45000
+        );
+      }),
+    ]);
 
     const serie = (payload.numeroSerie || String(id)).replace(/[^\w.-]+/g, "_");
-    const filename = `orden-cubiscan-${serie}.pdf`;
+    const filename =
+      kind === "agh"
+        ? `orden-agh-${serie}.pdf`
+        : `orden-cubiscan-${serie}.pdf`;
 
     return new NextResponse(Buffer.from(pdf), {
       status: 200,

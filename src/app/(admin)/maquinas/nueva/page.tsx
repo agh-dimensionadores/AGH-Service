@@ -13,7 +13,7 @@ export default function NuevaMaquinaPage() {
     <div>
       <PageHeader
         title="Agregar máquina"
-        description="Creá un modelo en el catálogo PostgreSQL (tabla maquinas). La foto se guarda en la base (BYTEA)."
+        description="Creá un modelo en el catálogo. En CubiScan, si el modelo es 100, 110, 150, 200 o 325 se usa la foto cubiscan de ese número."
         action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
       />
       <Panel className="max-w-xl">
@@ -25,10 +25,15 @@ export default function NuevaMaquinaPage() {
             <input
               name="modelo"
               className={inputClass}
-              placeholder="ODC, PDC, PDL, CLD-100..."
+              placeholder="100, 110, 150, ODC, PDC…"
               list="modelos-agh"
             />
             <datalist id="modelos-agh">
+              <option value="100" />
+              <option value="110" />
+              <option value="150" />
+              <option value="200" />
+              <option value="325" />
               <option value="ODC" />
               <option value="PDC" />
               <option value="PDL" />
@@ -43,7 +48,8 @@ export default function NuevaMaquinaPage() {
               className={inputClass}
             />
             <p className="mt-1 text-xs text-[var(--ink-muted)]">
-              JPG, PNG, WEBP o GIF · máx. 5 MB · se guarda en PostgreSQL
+              Opcional. CubiScan 100/110/150/200/325 ya tienen foto por modelo.
+              Otras marcas: JPG, PNG, WEBP o GIF · máx. 5 MB.
             </p>
           </Field>
           <SubmitButton className="btn-primary w-fit">

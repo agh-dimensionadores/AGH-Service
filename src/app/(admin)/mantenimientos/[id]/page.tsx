@@ -5,6 +5,7 @@ import {
   updateMantenimiento,
 } from "@/app/actions";
 import { GuardedForm, SubmitButton } from "@/components/form";
+import { DownloadPdfButton } from "@/components/download-pdf-button";
 import { prismaPg } from "@/lib/prisma";
 import { getCliente, clienteLabel } from "@/lib/clientes";
 import {
@@ -23,6 +24,7 @@ import {
   machineName,
   mantenimientoTitulo,
 } from "@/lib/utils";
+import { planillaKind } from "@/lib/planilla-template";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +62,10 @@ export default async function MantenimientoDetallePage({
 
   const item = await prismaPg.clienteMantenimiento.findUnique({
     where: { id },
-    include: { instalacion: { include: { maquina: true } } },
+    include: {
+      instalacion: { include: { maquina: true } },
+      ordenCubiscan: true,
+    },
   });
 
   if (!item) notFound();
@@ -70,8 +75,13 @@ export default async function MantenimientoDetallePage({
   const update = updateMantenimiento.bind(null, item.id);
   const cerrar = cerrarMantenimiento.bind(null, item.id);
   const estaCerrado = item.estado === "cerrado";
-  const esCubiscan =
-    (item.instalacion.maquina.marca || "").trim().toLowerCase() === "cubiscan";
+  const kind = planillaKind(
+    item.instalacion.maquina.marca,
+    item.instalacion.maquina.modelo
+  );
+  const tienePlanilla = Boolean(kind);
+  const planillaEnviada = Boolean(item.ordenCubiscan?.emailEnviadoEn);
+  const hayPlanilla = Boolean(item.ordenCubiscan);
 
   return (
     <div>
@@ -176,29 +186,59 @@ export default async function MantenimientoDetallePage({
           {estaCerrado ? (
             <div className="sm:col-span-2 space-y-3 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
               <p>Cerrado el {formatDate(item.arreglado)}.</p>
-              {esCubiscan ? (
-                <div className="flex flex-wrap gap-2">
-                  <PrimaryLink href={`/mantenimientos/${item.id}/planilla-cubiscan`}>
-                    Ver / reenviar planilla CubiScan
-                  </PrimaryLink>
-                  <a
-                    href={`/api/mantenimientos/${item.id}/planilla-cubiscan/pdf`}
-                    className="btn-ghost"
-                  >
-                    Descargar PDF
-                  </a>
-                </div>
+              {tienePlanilla ? (
+                planillaEnviada ? (
+                  <div className="flex flex-wrap gap-2">
+                    <PrimaryLink href={`/mantenimientos/${item.id}/planilla-cubiscan`}>
+                      Enviar mail
+                    </PrimaryLink>
+                    {hayPlanilla ? (
+                      <DownloadPdfButton
+                        href={`/api/mantenimientos/${item.id}/planilla-cubiscan/pdf`}
+                      >
+                        Descargar PDF
+                      </DownloadPdfButton>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <PrimaryLink href={`/mantenimientos/${item.id}/planilla-cubiscan`}>
+                      Editar PDF de la orden
+                    </PrimaryLink>
+                    {hayPlanilla ? (
+                      <DownloadPdfButton
+                        href={`/api/mantenimientos/${item.id}/planilla-cubiscan/pdf`}
+                      >
+                        Descargar PDF
+                      </DownloadPdfButton>
+                    ) : null}
+                  </div>
+                )
               ) : null}
             </div>
-          ) : esCubiscan ? (
-            <div className="sm:col-span-2 grid gap-3 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4">
-              <p className="text-sm text-[var(--ink-muted)]">
-                Este equipo es CubiScan: al cerrar tenés que completar la orden
-                de servicio (checklist, firmas y envío al cliente).
+          ) : tienePlanilla ? (
+            <div className="sm:col-span-2 grid gap-3 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4 sm:grid-cols-[1fr_auto] sm:items-end">
+              <Field label="Fecha de arreglo (al cerrar)">
+                <input
+                  name="arreglado"
+                  type="date"
+                  defaultValue={toDateInput(new Date())}
+                  className={inputClass}
+                />
+              </Field>
+              <button
+                type="submit"
+                formAction={cerrar}
+                className="btn-primary"
+              >
+                Cerrar trabajo
+              </button>
+              <p className="sm:col-span-2 text-xs text-[var(--ink-muted)]">
+                Marca el pedido como realizado y abre la orden de servicio para
+                armar el PDF
+                {kind === "agh" ? " AGH Dimensionadores" : " CubiScan"}. Podés
+                editarla hasta enviar el mail.
               </p>
-              <PrimaryLink href={`/mantenimientos/${item.id}/planilla-cubiscan`}>
-                Cerrar trabajo (planilla CubiScan)
-              </PrimaryLink>
             </div>
           ) : (
             <div className="sm:col-span-2 grid gap-3 rounded-xl border border-[rgba(182,255,59,0.25)] bg-[rgba(182,255,59,0.06)] p-4 sm:grid-cols-[1fr_auto] sm:items-end">

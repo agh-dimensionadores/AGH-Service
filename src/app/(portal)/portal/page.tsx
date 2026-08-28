@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireCliente } from "@/lib/auth";
 import { getCliente, clienteLabel } from "@/lib/clientes";
 import { prismaPg } from "@/lib/prisma";
-import { catalogImageUrl } from "@/lib/uploads";
+import { MachineThumb } from "@/components/machine-thumb";
 import {
   Badge,
   PageHeader,
@@ -14,7 +14,6 @@ import {
   equipoEstado,
   formatDate,
   labelEstado,
-  machineThumbStyle,
   machineName,
 } from "@/lib/utils";
 
@@ -109,24 +108,11 @@ export default async function PortalHomePage() {
                 href={`/portal/maquinas/${unidad.id}`}
                 className="card overflow-hidden transition hover:border-[rgba(182,255,59,0.35)]"
               >
-                {unidad.maquina.imagenMime ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={catalogImageUrl(
-                      unidad.maquina.idmachine,
-                      unidad.maquina.imagenUpdatedAt
-                    )}
-                    alt={machineName(unidad)}
-                    className="machine-thumb rounded-none object-cover"
-                  />
-                ) : (
-                  <div
-                    className="machine-thumb rounded-none"
-                    style={machineThumbStyle(
-                      unidad.maquina.modelo ?? unidad.maquina.marca
-                    )}
-                  />
-                )}
+                <MachineThumb
+                  maquina={unidad.maquina}
+                  alt={machineName(unidad)}
+                  className="machine-thumb rounded-none object-cover"
+                />
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>

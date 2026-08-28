@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   ],
   experimental: {
     serverActions: {
-      bodySizeLimit: "6mb",
+      bodySizeLimit: "16mb",
     },
   },
   webpack: (config) => {

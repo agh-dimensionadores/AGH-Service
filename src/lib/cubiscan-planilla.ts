@@ -73,12 +73,11 @@ export const CUBISCAN_CHECK_SECTIONS: CubiscanCheckSection[] = [
 ];
 
 export type CubiscanRefaccion = {
-  parte: string;
   cantidad: string;
   numeroParte: string;
   descripcion: string;
   /** reemplazada | nueva */
-  estado: "" | "reemplazada" | "nueva";
+  estado: "reemplazada" | "nueva";
 };
 
 export type CubiscanOrdenPayload = {
@@ -97,8 +96,6 @@ export type CubiscanOrdenPayload = {
   mantenimientoTipo: "" | "preventivo" | "correctivo";
   checks: Record<string, string | boolean>;
   comentarios: string;
-  cuboCalibracion: boolean;
-  nroMasa: string;
   refacciones: CubiscanRefaccion[];
   falloResuelto: "" | "si" | "no" | "en_proceso";
   velocidadServicio: "" | "rapido" | "normal" | "lento";
@@ -141,10 +138,13 @@ export function emptyCubiscanPayload(
     mantenimientoTipo: defaults.mantenimientoTipo ?? "correctivo",
     checks: defaults.checks ?? {},
     comentarios: defaults.comentarios ?? "",
-    cuboCalibracion: defaults.cuboCalibracion ?? false,
-    nroMasa: defaults.nroMasa ?? "",
     refacciones: defaults.refacciones ?? [
-      { parte: "", cantidad: "", numeroParte: "", descripcion: "", estado: "" },
+      {
+        cantidad: "",
+        numeroParte: "",
+        descripcion: "",
+        estado: "reemplazada",
+      },
     ],
     falloResuelto: defaults.falloResuelto ?? "",
     velocidadServicio: defaults.velocidadServicio ?? "",
@@ -208,9 +208,16 @@ export function buildCubiscanOrdenHtml(opts: {
   payload: CubiscanOrdenPayload;
   firmaIngeniero?: string | null;
   firmaCliente?: string | null;
+  sections?: CubiscanCheckSection[];
+  titulo?: string;
+  firmaLabel?: string;
 }) {
   const { payload: p, firmaIngeniero, firmaCliente } = opts;
-  const sectionsHtml = CUBISCAN_CHECK_SECTIONS.map((section) => {
+  const sections = opts.sections ?? CUBISCAN_CHECK_SECTIONS;
+  const titulo =
+    opts.titulo ?? "Orden de Servicio para Equipo CubiScan";
+  const firmaLabel = opts.firmaLabel ?? "Representante de CubiScan";
+  const sectionsHtml = sections.map((section) => {
     const items = section.items
       .map(
         (item) =>
@@ -221,11 +228,13 @@ export function buildCubiscanOrdenHtml(opts: {
   }).join("");
 
   const refacciones = (p.refacciones ?? [])
-    .filter((r) => r.parte || r.cantidad || r.numeroParte || r.descripcion)
+    .filter((r) => r.cantidad || r.numeroParte || r.descripcion)
     .map(
       (r) =>
         `<tr>
-          <td style="border:1px solid #ddd;padding:6px">${esc(r.parte)}</td>
+          <td style="border:1px solid #ddd;padding:6px">${esc(
+            r.estado === "nueva" ? "Nueva" : "Reemplazada"
+          )}</td>
           <td style="border:1px solid #ddd;padding:6px">${esc(r.cantidad)}</td>
           <td style="border:1px solid #ddd;padding:6px">${esc(r.numeroParte)}</td>
           <td style="border:1px solid #ddd;padding:6px">${esc(r.descripcion)}</td>
@@ -242,9 +251,9 @@ export function buildCubiscanOrdenHtml(opts: {
 
   return `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="utf-8" /><title>Orden de Servicio CubiScan</title></head>
+<head><meta charset="utf-8" /><title>${esc(titulo)}</title></head>
 <body style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.45;max-width:720px;margin:0 auto;padding:24px">
-  <h1 style="font-size:20px;margin:0 0 8px">Orden de Servicio para Equipo CubiScan</h1>
+  <h1 style="font-size:20px;margin:0 0 8px">${esc(titulo)}</h1>
   <p style="margin:0 0 4px"><strong>Modelo</strong> ${esc(p.modelo || "—")}</p>
   <p style="margin:12px 0 4px"><strong>${esc(CUBISCAN_EMPRESA.nombre)}</strong><br/>
   ${esc(CUBISCAN_EMPRESA.direccion)}<br/>
@@ -272,7 +281,7 @@ export function buildCubiscanOrdenHtml(opts: {
   <table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead>
       <tr>
-        <th style="border:1px solid #ddd;padding:6px;text-align:left">Partes</th>
+        <th style="border:1px solid #ddd;padding:6px;text-align:left">Tipo</th>
         <th style="border:1px solid #ddd;padding:6px;text-align:left">Cantidad</th>
         <th style="border:1px solid #ddd;padding:6px;text-align:left">N.º de parte</th>
         <th style="border:1px solid #ddd;padding:6px;text-align:left">Descripción</th>
@@ -300,7 +309,7 @@ export function buildCubiscanOrdenHtml(opts: {
         ${firmaCli}
       </td>
       <td style="width:50%;vertical-align:bottom;padding-left:12px">
-        <p style="margin:0 0 8px"><strong>Representante de CubiScan</strong><br/>${esc(p.representanteCubiscan || p.ingenieros || "—")}</p>
+        <p style="margin:0 0 8px"><strong>${esc(firmaLabel)}</strong><br/>${esc(p.representanteCubiscan || p.ingenieros || "—")}</p>
         ${firmaIng}
       </td>
     </tr>

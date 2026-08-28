@@ -107,8 +107,21 @@ model CubiscanOrdenServicio {
   emailError       String?  @map("email_error")
   creadoEn         DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
   mantenimiento    ClienteMantenimiento @relation(fields: [idMantenimiento], references: [id], onDelete: Cascade)
+  fotos            CubiscanOrdenFoto[]
 
   @@map("cubiscan_ordenes_servicio")
+}
+
+model CubiscanOrdenFoto {
+  id            Int                   @id @default(autoincrement())
+  idOrden       Int                   @map("id_orden")
+  imagen        Bytes
+  imagenMime    String                @map("imagen_mime") @db.VarChar(50)
+  orden         Int                   @default(0)
+  ordenServicio CubiscanOrdenServicio @relation(fields: [idOrden], references: [id], onDelete: Cascade)
+
+  @@index([idOrden])
+  @@map("cubiscan_orden_fotos")
 }
 
 /// Login de AGH Service. No confundir con cloud_users (Voxel Cloud).

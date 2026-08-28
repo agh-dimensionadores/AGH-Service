@@ -12,8 +12,19 @@ import {
 } from "@/lib/cubiscan-planilla";
 import { mailConfigured, sendMail } from "@/lib/mail";
 import { prismaPg } from "@/lib/prisma";
-import { readUploadedImage } from "@/lib/uploads";
+import {
+  MAX_FOTO_MANTENIMIENTO_BYTES,
+  MAX_FOTOS_MANTENIMIENTO,
+  readUploadedImage,
+} from "@/lib/uploads";
 import { buildNumeroSerie } from "@/lib/utils";
+import {
+  checkSectionsFor,
+  planillaFirmaLabel,
+  planillaKind,
+  planillaTitulo,
+  type PlanillaKind,
+} from "@/lib/planilla-template";
 import type { Prisma } from "@prisma/client-pg";
 
 function str(formData: FormData, key: string) {
@@ -670,14 +681,30 @@ export async function cerrarMantenimiento(id: number, formData: FormData) {
       solicitado: true,
       idClienteMaquina: true,
       estado: true,
+      instalacion: { select: { maquina: { select: { marca: true, modelo: true } } } },
     },
   });
   if (!existing) throw new Error("Mantenimiento no encontrado");
+  const kind = planillaKind(
+    existing.instalacion.maquina.marca,
+    existing.instalacion.maquina.modelo
+  );
+  const tienePlanilla = Boolean(kind);
   if (existing.estado === "cerrado") {
-    redirect(`/mantenimientos/${id}`);
+    redirect(
+      tienePlanilla
+        ? `/mantenimientos/${id}/planilla-cubiscan`
+        : `/mantenimientos/${id}`
+    );
   }
 
-  const comentarioArreglo = optionalStr(formData, "comentarioArreglo");
+  const comentarioArreglo =
+    optionalStr(formData, "comentarioArreglo") ||
+    (kind === "agh"
+      ? "Cerrado con planilla AGH Dimensionadores"
+      : kind === "cubiscan"
+        ? "Cerrado con planilla CubiScan"
+        : null);
   const arreglado = optionalDate(formData, "arreglado") ?? new Date();
 
   await prismaPg.clienteMantenimiento.update({
@@ -696,11 +723,39 @@ export async function cerrarMantenimiento(id: number, formData: FormData) {
 
   touch(
     `/mantenimientos/${id}`,
+    `/mantenimientos/${id}/planilla-cubiscan`,
     `/maquinas/${existing.idClienteMaquina}`,
     "/mantenimientos",
     "/calendario"
   );
-  redirect(`/mantenimientos/${id}?cerrado=1`);
+  redirect(
+    tienePlanilla
+      ? `/mantenimientos/${id}/planilla-cubiscan`
+      : `/mantenimientos/${id}?cerrado=1`
+  );
+}
+
+function planillaMailOpts(
+  kind: PlanillaKind,
+  payload: CubiscanOrdenPayload,
+  firmaIngeniero?: string | null,
+  firmaCliente?: string | null
+) {
+  return {
+    html: buildCubiscanOrdenHtml({
+      payload,
+      firmaIngeniero,
+      firmaCliente,
+      sections: checkSectionsFor(kind),
+      titulo: planillaTitulo(kind),
+      firmaLabel: planillaFirmaLabel(kind),
+    }),
+    subject: `${planillaTitulo(kind)} · ${payload.modelo} · ${payload.numeroSerie}`,
+    filename:
+      kind === "agh"
+        ? `orden-agh-${payload.numeroSerie || "orden"}.html`
+        : `orden-cubiscan-${payload.numeroSerie || "orden"}.html`,
+  };
 }
 
 function parseCubiscanPayload(formData: FormData): CubiscanOrdenPayload {
@@ -713,20 +768,23 @@ function parseCubiscanPayload(formData: FormData): CubiscanOrdenPayload {
     else if (value) checks[checkId] = value;
   }
 
-  const partes = formData.getAll("ref_parte").map((v) => String(v));
   const cantidades = formData.getAll("ref_cantidad").map((v) => String(v));
   const numeros = formData.getAll("ref_numero").map((v) => String(v));
   const descripciones = formData.getAll("ref_descripcion").map((v) => String(v));
   const estados = formData.getAll("ref_estado").map((v) => String(v));
-  const refacciones: CubiscanRefaccion[] = partes.map((parte, i) => {
+  const n = Math.max(
+    cantidades.length,
+    numeros.length,
+    descripciones.length,
+    estados.length
+  );
+  const refacciones: CubiscanRefaccion[] = Array.from({ length: n }, (_, i) => {
     const est = (estados[i] ?? "").trim();
     return {
-      parte: parte.trim(),
       cantidad: (cantidades[i] ?? "").trim(),
       numeroParte: (numeros[i] ?? "").trim(),
       descripcion: (descripciones[i] ?? "").trim(),
-      estado:
-        est === "reemplazada" || est === "nueva" ? est : "",
+      estado: est === "nueva" ? "nueva" : "reemplazada",
     };
   });
 
@@ -753,10 +811,6 @@ function parseCubiscanPayload(formData: FormData): CubiscanOrdenPayload {
       mantTipo === "preventivo" || mantTipo === "correctivo" ? mantTipo : "",
     checks,
     comentarios: str(formData, "comentarios"),
-    cuboCalibracion:
-      formData.get("cuboCalibracion") === "on" ||
-      formData.get("cuboCalibracion") === "true",
-    nroMasa: str(formData, "nroMasa"),
     refacciones,
     falloResuelto:
       fallo === "si" || fallo === "no" || fallo === "en_proceso" ? fallo : "",
@@ -775,82 +829,139 @@ function parseCubiscanPayload(formData: FormData): CubiscanOrdenPayload {
   });
 }
 
-/** Cierra mantenimiento CubiScan con planilla, firmas y mail al cliente. */
-export async function cerrarConPlanillaCubiscan(
-  id: number,
-  formData: FormData
-) {
-  await requireAdmin();
-
+async function loadCubiscanMantenimiento(id: number) {
   const item = await prismaPg.clienteMantenimiento.findUnique({
     where: { id },
     include: {
       instalacion: { include: { maquina: true } },
-      ordenCubiscan: true,
+      ordenCubiscan: { include: { fotos: { select: { id: true, orden: true } } } },
     },
   });
   if (!item) throw new Error("Mantenimiento no encontrado");
-
-  const marca = (item.instalacion.maquina.marca || "").trim().toLowerCase();
-  if (marca !== "cubiscan") {
-    throw new Error("Esta planilla solo aplica a equipos CubiScan");
+  const kind = planillaKind(
+    item.instalacion.maquina.marca,
+    item.instalacion.maquina.modelo
+  );
+  if (!kind) {
+    throw new Error("Esta planilla solo aplica a equipos CubiScan, ODC o PDC");
   }
-  if (item.estado === "cerrado" && item.ordenCubiscan) {
-    redirect(`/mantenimientos/${id}/planilla-cubiscan`);
+  return item;
+}
+
+function resolveFirmas(
+  formData: FormData,
+  saved: { firmaIngeniero: string | null; firmaCliente: string | null } | null
+) {
+  const fromFormIng = str(formData, "firmaIngeniero");
+  const fromFormCli = str(formData, "firmaCliente");
+  const firmaIngeniero = fromFormIng.startsWith("data:image/")
+    ? fromFormIng
+    : saved?.firmaIngeniero || "";
+  const firmaCliente = fromFormCli.startsWith("data:image/")
+    ? fromFormCli
+    : saved?.firmaCliente || "";
+  return { firmaIngeniero, firmaCliente };
+}
+
+async function ensureCubiscanFotosTable() {
+  await prismaPg.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS cubiscan_orden_fotos (
+      id SERIAL PRIMARY KEY,
+      id_orden INTEGER NOT NULL
+        REFERENCES cubiscan_ordenes_servicio(id) ON DELETE CASCADE,
+      imagen BYTEA NOT NULL,
+      imagen_mime VARCHAR(50) NOT NULL,
+      orden INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+}
+
+async function saveCubiscanFotos(idMantenimiento: number, formData: FormData) {
+  await ensureCubiscanFotosTable();
+  const orden = await prismaPg.cubiscanOrdenServicio.findUnique({
+    where: { idMantenimiento },
+    select: { id: true },
+  });
+  if (!orden) return;
+
+  const quitar = formData
+    .getAll("quitarFoto")
+    .map((v) => Number(v))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (quitar.length) {
+    await prismaPg.cubiscanOrdenFoto.deleteMany({
+      where: { id: { in: quitar }, idOrden: orden.id },
+    });
+  }
+
+  const remaining = await prismaPg.cubiscanOrdenFoto.count({
+    where: { idOrden: orden.id },
+  });
+  const slots = Math.max(0, MAX_FOTOS_MANTENIMIENTO - remaining);
+  const files = formData
+    .getAll("fotos")
+    .filter((v): v is File => v instanceof File && v.size > 0)
+    .slice(0, slots);
+
+  let ordenN = remaining;
+  for (const file of files) {
+    const image = await readUploadedImage(file, MAX_FOTO_MANTENIMIENTO_BYTES);
+    if (!image) continue;
+    await prismaPg.cubiscanOrdenFoto.create({
+      data: {
+        idOrden: orden.id,
+        imagen: Buffer.from(image.bytes),
+        imagenMime: image.mime,
+        orden: ordenN,
+      },
+    });
+    ordenN += 1;
+  }
+}
+
+async function upsertCubiscanOrden(
+  id: number,
+  item: Awaited<ReturnType<typeof loadCubiscanMantenimiento>>,
+  formData: FormData,
+  extra: {
+    emailDestino?: string | null;
+    requireFirmas?: boolean;
+  }
+) {
+  if (item.ordenCubiscan?.emailEnviadoEn) {
+    throw new Error("La orden ya se envió y no se puede editar");
   }
 
   const payload = parseCubiscanPayload(formData);
-  if (!payload.modelo || !payload.ingenieros || !payload.cliente || !payload.numeroSerie) {
+  if (
+    !payload.modelo ||
+    !payload.ingenieros ||
+    !payload.cliente ||
+    !payload.numeroSerie
+  ) {
     throw new Error("Completá modelo, ingeniero(s), cliente y nro. de serie");
   }
 
-  const firmaIngeniero = str(formData, "firmaIngeniero");
-  const firmaCliente = str(formData, "firmaCliente");
-  if (!firmaIngeniero.startsWith("data:image/") || !firmaCliente.startsWith("data:image/")) {
-    throw new Error("Se requieren ambas firmas digitales");
-  }
-
-  const emailDestino = str(formData, "emailDestino").toLowerCase();
-  if (!emailDestino.includes("@")) {
-    throw new Error("Ingresá un email de cliente válido");
+  const { firmaIngeniero, firmaCliente } = resolveFirmas(
+    formData,
+    item.ordenCubiscan
+  );
+  if (
+    extra.requireFirmas &&
+    (!firmaIngeniero.startsWith("data:image/") ||
+      !firmaCliente.startsWith("data:image/"))
+  ) {
+    throw new Error("Se requieren ambas firmas digitales para enviar");
   }
 
   const arreglado = payload.fecha
     ? new Date(`${payload.fecha}T12:00:00`)
     : new Date();
 
-  const html = buildCubiscanOrdenHtml({
-    payload,
-    firmaIngeniero,
-    firmaCliente,
-  });
-
-  let emailEnviadoEn: Date | null = null;
-  let emailError: string | null = null;
-
-  if (mailConfigured()) {
-    try {
-      await sendMail({
-        to: emailDestino,
-        subject: `Orden de Servicio CubiScan · ${payload.modelo} · ${payload.numeroSerie}`,
-        html,
-        attachments: [
-          {
-            filename: `orden-cubiscan-${id}.html`,
-            content: html,
-            contentType: "text/html; charset=utf-8",
-          },
-        ],
-      });
-      emailEnviadoEn = new Date();
-    } catch (err) {
-      emailError =
-        err instanceof Error ? err.message : "No se pudo enviar el correo";
-    }
-  } else {
-    emailError =
-      "SMTP no configurado (SMTP_HOST / SMTP_USER / SMTP_PASS / SMTP_FROM). La planilla se guardó igual.";
-  }
+  const emailDestino =
+    extra.emailDestino !== undefined
+      ? extra.emailDestino
+      : item.ordenCubiscan?.emailDestino ?? null;
 
   await prismaPg.$transaction([
     prismaPg.clienteMantenimiento.update({
@@ -870,22 +981,46 @@ export async function cerrarConPlanillaCubiscan(
       create: {
         idMantenimiento: id,
         payload: payload as unknown as Prisma.InputJsonValue,
-        firmaIngeniero,
-        firmaCliente,
+        firmaIngeniero: firmaIngeniero || null,
+        firmaCliente: firmaCliente || null,
         emailDestino,
-        emailEnviadoEn,
-        emailError,
       },
       update: {
         payload: payload as unknown as Prisma.InputJsonValue,
-        firmaIngeniero,
-        firmaCliente,
+        firmaIngeniero: firmaIngeniero || null,
+        firmaCliente: firmaCliente || null,
         emailDestino,
-        emailEnviadoEn,
-        emailError,
       },
     }),
   ]);
+
+  await saveCubiscanFotos(id, formData);
+
+  return { payload, firmaIngeniero, firmaCliente };
+}
+
+/** Una sola acción de formulario: guardar o enviar según `intent`. */
+export async function submitPlanillaCubiscan(
+  id: number,
+  formData: FormData
+) {
+  if (str(formData, "intent") === "enviar") {
+    await enviarPlanillaCubiscan(id, formData);
+    return;
+  }
+  await guardarPlanillaCubiscan(id, formData);
+}
+
+/** Guarda la planilla CubiScan sin enviar (sigue editable). */
+export async function guardarPlanillaCubiscan(
+  id: number,
+  formData: FormData
+) {
+  await requireAdmin();
+  const item = await loadCubiscanMantenimiento(id);
+  await upsertCubiscanOrden(id, item, formData, {
+    emailDestino: optionalStr(formData, "emailDestino")?.toLowerCase() ?? null,
+  });
 
   touch(
     `/mantenimientos/${id}`,
@@ -894,11 +1029,87 @@ export async function cerrarConPlanillaCubiscan(
     "/mantenimientos",
     "/calendario"
   );
+  redirect(`/mantenimientos/${id}/planilla-cubiscan?guardado=1`);
+}
 
-  const q = emailEnviadoEn
-    ? "enviado=1"
-    : `guardado=1&mail=${encodeURIComponent(emailError || "error")}`;
-  redirect(`/mantenimientos/${id}/planilla-cubiscan?${q}`);
+/** Guarda, envía el mail y bloquea la edición. */
+export async function enviarPlanillaCubiscan(
+  id: number,
+  formData: FormData
+) {
+  await requireAdmin();
+  const item = await loadCubiscanMantenimiento(id);
+  if (item.ordenCubiscan?.emailEnviadoEn) {
+    redirect(`/mantenimientos/${id}/planilla-cubiscan`);
+  }
+
+  const emailDestino = str(formData, "emailDestino").toLowerCase();
+  if (!emailDestino.includes("@")) {
+    throw new Error("Ingresá un email de cliente válido");
+  }
+  if (!mailConfigured()) {
+    throw new Error(
+      "SMTP no configurado. Definí SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS y SMTP_FROM en .env"
+    );
+  }
+
+  const { payload, firmaIngeniero, firmaCliente } = await upsertCubiscanOrden(
+    id,
+    item,
+    formData,
+    { emailDestino, requireFirmas: true }
+  );
+
+  const kind =
+    planillaKind(
+      item.instalacion.maquina.marca,
+      item.instalacion.maquina.modelo
+    ) ?? "cubiscan";
+  const mail = planillaMailOpts(kind, payload, firmaIngeniero, firmaCliente);
+
+  try {
+    await sendMail({
+      to: emailDestino,
+      subject: mail.subject,
+      html: mail.html,
+      attachments: [
+        {
+          filename: mail.filename,
+          content: mail.html,
+          contentType: "text/html; charset=utf-8",
+        },
+      ],
+    });
+  } catch (err) {
+    await prismaPg.cubiscanOrdenServicio.update({
+      where: { idMantenimiento: id },
+      data: {
+        emailError:
+          err instanceof Error ? err.message : "No se pudo enviar el correo",
+      },
+    });
+    throw new Error(
+      err instanceof Error ? err.message : "No se pudo enviar el correo"
+    );
+  }
+
+  await prismaPg.cubiscanOrdenServicio.update({
+    where: { idMantenimiento: id },
+    data: {
+      emailDestino,
+      emailEnviadoEn: new Date(),
+      emailError: null,
+    },
+  });
+
+  touch(
+    `/mantenimientos/${id}`,
+    `/mantenimientos/${id}/planilla-cubiscan`,
+    `/maquinas/${item.idClienteMaquina}`,
+    "/mantenimientos",
+    "/calendario"
+  );
+  redirect(`/mantenimientos/${id}/planilla-cubiscan?enviado=1`);
 }
 
 /** Reenvía la orden CubiScan ya guardada. */
@@ -909,8 +1120,13 @@ export async function reenviarPlanillaCubiscan(
   await requireAdmin();
   const orden = await prismaPg.cubiscanOrdenServicio.findUnique({
     where: { idMantenimiento: id },
+    include: {
+      mantenimiento: {
+        include: { instalacion: { include: { maquina: true } } },
+      },
+    },
   });
-  if (!orden) throw new Error("No hay planilla CubiScan para este trabajo");
+  if (!orden) throw new Error("No hay planilla para este trabajo");
 
   const emailDestino =
     str(formData, "emailDestino").toLowerCase() ||
@@ -923,11 +1139,17 @@ export async function reenviarPlanillaCubiscan(
   const payload = emptyCubiscanPayload(
     orden.payload as unknown as Partial<CubiscanOrdenPayload>
   );
-  const html = buildCubiscanOrdenHtml({
+  const kind =
+    planillaKind(
+      orden.mantenimiento.instalacion.maquina.marca,
+      orden.mantenimiento.instalacion.maquina.modelo
+    ) ?? "cubiscan";
+  const mail = planillaMailOpts(
+    kind,
     payload,
-    firmaIngeniero: orden.firmaIngeniero,
-    firmaCliente: orden.firmaCliente,
-  });
+    orden.firmaIngeniero,
+    orden.firmaCliente
+  );
 
   if (!mailConfigured()) {
     throw new Error(
@@ -937,12 +1159,12 @@ export async function reenviarPlanillaCubiscan(
 
   await sendMail({
     to: emailDestino,
-    subject: `Orden de Servicio CubiScan · ${payload.modelo} · ${payload.numeroSerie}`,
-    html,
+    subject: mail.subject,
+    html: mail.html,
     attachments: [
       {
-        filename: `orden-cubiscan-${id}.html`,
-        content: html,
+        filename: mail.filename,
+        content: mail.html,
         contentType: "text/html; charset=utf-8",
       },
     ],

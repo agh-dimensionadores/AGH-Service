@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prismaPg } from "@/lib/prisma";
 import { getClientesMap, clienteLabel } from "@/lib/clientes";
-import { catalogImageUrl } from "@/lib/uploads";
+import { MachineThumb } from "@/components/machine-thumb";
+import { maquinaImageSrc } from "@/lib/maquina-images";
 import {
   Badge,
   EmptyState,
@@ -14,7 +15,6 @@ import {
   equipoEstado,
   labelEstado,
   machineName,
-  machineThumbStyle,
 } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -184,19 +184,11 @@ export default async function MaquinasPage({
                 href={`/maquinas/catalogo/${item.idmachine}`}
                 className="card overflow-hidden transition hover:border-[rgba(182,255,59,0.35)]"
               >
-                {item.imagenMime ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={catalogImageUrl(item.idmachine, item.imagenUpdatedAt)}
-                    alt={`${item.marca} ${item.modelo ?? ""}`}
-                    className="machine-thumb rounded-none object-cover"
-                  />
-                ) : (
-                  <div
-                    className="machine-thumb rounded-none"
-                    style={machineThumbStyle(item.modelo ?? item.marca)}
-                  />
-                )}
+                <MachineThumb
+                  maquina={item}
+                  alt={`${item.marca} ${item.modelo ?? ""}`}
+                  className="machine-thumb rounded-none object-cover"
+                />
                 <div className="p-3">
                   <p className="font-medium text-white">
                     {item.marca} {item.modelo}
@@ -204,7 +196,7 @@ export default async function MaquinasPage({
                   <p className="text-xs text-[var(--ink-muted)]">
                     {item._count.instalaciones} asignada
                     {item._count.instalaciones === 1 ? "" : "s"}
-                    {!item.imagenMime ? " · sin foto" : ""}
+                    {!maquinaImageSrc(item) ? " · sin foto" : ""}
                   </p>
                   <p className="mt-2 text-xs text-[var(--accent)]">
                     Editar

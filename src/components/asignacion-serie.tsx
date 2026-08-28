@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Field, inputClass } from "@/components/ui";
-import { machineThumbStyle, seriePrefixFromModelo } from "@/lib/utils";
-import { catalogImageUrl } from "@/lib/uploads";
+import { seriePrefixFromModelo } from "@/lib/utils";
+import { MachineThumb } from "@/components/machine-thumb";
 
 export type CatalogoOption = {
   idmachine: number;
@@ -77,22 +77,11 @@ export function AsignacionCatalogoYSerie({
                   : "border-[var(--line)]"
               }`}
             >
-              {item.imagenMime ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={catalogImageUrl(
-                    item.idmachine,
-                    item.imagenUpdatedAt ? new Date(item.imagenUpdatedAt) : null
-                  )}
-                  alt={`${item.marca} ${item.modelo ?? ""}`}
-                  className="h-20 w-full object-cover"
-                />
-              ) : (
-                <div
-                  className="h-20 w-full"
-                  style={machineThumbStyle(item.modelo ?? item.marca)}
-                />
-              )}
+              <MachineThumb
+                maquina={item}
+                alt={`${item.marca} ${item.modelo ?? ""}`}
+                className="h-20 w-full object-cover"
+              />
               <p className="px-2 py-1 text-xs text-[var(--ink-muted)]">
                 {item.marca} {item.modelo}
               </p>

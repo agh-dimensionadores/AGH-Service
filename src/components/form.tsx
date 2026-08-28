@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 type ServerAction = (formData: FormData) => void | Promise<void>;
@@ -73,15 +73,41 @@ export function SubmitButton({
   children,
   pendingLabel = "Guardando…",
   className = "btn-primary",
+  formAction,
+  name,
+  value,
+  onBeforeSubmit,
 }: {
   children: React.ReactNode;
   pendingLabel?: string;
   className?: string;
+  formAction?: ServerAction;
+  name?: string;
+  value?: string;
+  onBeforeSubmit?: (form: HTMLFormElement) => void;
 }) {
   const { pending } = useFormStatus();
+  const [clicked, setClicked] = useState(false);
+
+  useEffect(() => {
+    if (!pending) setClicked(false);
+  }, [pending]);
+
   return (
-    <button type="submit" disabled={pending} className={className}>
-      {pending ? pendingLabel : children}
+    <button
+      type="submit"
+      disabled={pending}
+      className={className}
+      formAction={formAction}
+      name={name}
+      value={value}
+      onClick={(e) => {
+        setClicked(true);
+        const form = e.currentTarget.form;
+        if (form && onBeforeSubmit) onBeforeSubmit(form);
+      }}
+    >
+      {pending && clicked ? pendingLabel : children}
     </button>
   );
 }

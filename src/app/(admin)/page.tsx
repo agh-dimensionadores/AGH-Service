@@ -2,8 +2,8 @@ import Link from "next/link";
 import { prismaPg } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getClientesMap, clienteLabel } from "@/lib/clientes";
-import { catalogImageUrl } from "@/lib/uploads";
 import { DonutChart } from "@/components/donut";
+import { MachineThumb } from "@/components/machine-thumb";
 import {
   IconAlert,
   IconCheck,
@@ -22,7 +22,6 @@ import {
   labelCountdown,
   labelEstado,
   machineName,
-  machineThumbStyle,
   mantenimientoTitulo,
 } from "@/lib/utils";
 
@@ -190,25 +189,11 @@ export default async function DashboardPage() {
                       href={`/maquinas/${item.idClienteMaquina}`}
                       className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 transition hover:border-[rgba(182,255,59,0.35)]"
                     >
-                      {item.instalacion.maquina.imagenMime ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={catalogImageUrl(
-                            item.instalacion.maquina.idmachine,
-                            item.instalacion.maquina.imagenUpdatedAt
-                          )}
-                          alt={machineName(item.instalacion)}
-                          className="h-12 w-14 shrink-0 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div
-                          className="h-12 w-14 shrink-0 rounded-lg"
-                          style={machineThumbStyle(
-                            item.instalacion.maquina.modelo ??
-                              item.instalacion.maquina.marca
-                          )}
-                        />
-                      )}
+                      <MachineThumb
+                        maquina={item.instalacion.maquina}
+                        alt={machineName(item.instalacion)}
+                        className="h-12 w-14 shrink-0 rounded-lg object-cover"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-white">
                           {machineName(item.instalacion)}
@@ -310,24 +295,11 @@ export default async function DashboardPage() {
                   href={`/maquinas/${unidad.id}`}
                   className="rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 transition hover:border-[rgba(182,255,59,0.35)]"
                 >
-                  {unidad.maquina.imagenMime ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={catalogImageUrl(
-                        unidad.maquina.idmachine,
-                        unidad.maquina.imagenUpdatedAt
-                      )}
-                      alt={machineName(unidad)}
-                      className="machine-thumb mb-3 object-cover"
-                    />
-                  ) : (
-                    <div
-                      className="machine-thumb mb-3"
-                      style={machineThumbStyle(
-                        unidad.maquina.modelo ?? unidad.maquina.marca
-                      )}
-                    />
-                  )}
+                  <MachineThumb
+                    maquina={unidad.maquina}
+                    alt={machineName(unidad)}
+                    className="machine-thumb mb-3 object-cover"
+                  />
                   <p className="font-medium text-white">{machineName(unidad)}</p>
                   <p className="truncate text-xs text-[var(--ink-muted)]">
                     {clienteLabel(clientesMap.get(unidad.idCliente))}

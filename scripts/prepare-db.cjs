@@ -83,6 +83,20 @@ async function ensureTables() {
       creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS cubiscan_orden_fotos (
+      id SERIAL PRIMARY KEY,
+      id_orden INTEGER NOT NULL
+        REFERENCES cubiscan_ordenes_servicio(id) ON DELETE CASCADE,
+      imagen BYTEA NOT NULL,
+      imagen_mime VARCHAR(50) NOT NULL,
+      orden INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS cubiscan_orden_fotos_orden_idx
+      ON cubiscan_orden_fotos (id_orden)
+  `);
 }
 
 async function seedIfNeeded() {
