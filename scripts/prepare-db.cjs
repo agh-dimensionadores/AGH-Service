@@ -47,6 +47,25 @@ async function ensureTables() {
       ADD COLUMN IF NOT EXISTS modalidad VARCHAR(20) NOT NULL DEFAULT 'venta'
   `);
   await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_maquinas
+      ADD COLUMN IF NOT EXISTS anydesk VARCHAR(50)
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_maquinas
+      ADD COLUMN IF NOT EXISTS serie_compu VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS serie_camara VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS serie_ecoflow VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS serie_pistola VARCHAR(100)
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_mantenimientos
+      ALTER COLUMN id_cliente_maquina DROP NOT NULL
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_mantenimientos
+      ADD COLUMN IF NOT EXISTS empresa_temp VARCHAR(200)
+  `);
+  await db.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS maquinas_alquileres (
       id SERIAL PRIMARY KEY,
       id_cliente_maquina INTEGER NOT NULL REFERENCES clientes_maquinas(id) ON DELETE CASCADE,

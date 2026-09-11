@@ -70,15 +70,23 @@ export default async function MantenimientoDetallePage({
 
   if (!item) notFound();
 
-  const cliente = await getCliente(item.instalacion.idCliente);
+  const sinEquipo = !item.instalacion;
+  const cliente = item.instalacion
+    ? await getCliente(item.instalacion.idCliente)
+    : null;
+  const empresaLabel = sinEquipo
+    ? item.empresaTemp?.trim() || "Empresa provisional"
+    : clienteLabel(cliente);
 
   const update = updateMantenimiento.bind(null, item.id);
   const cerrar = cerrarMantenimiento.bind(null, item.id);
   const estaCerrado = item.estado === "cerrado";
-  const kind = planillaKind(
-    item.instalacion.maquina.marca,
-    item.instalacion.maquina.modelo
-  );
+  const kind = item.instalacion
+    ? planillaKind(
+        item.instalacion.maquina.marca,
+        item.instalacion.maquina.modelo
+      )
+    : null;
   const tienePlanilla = Boolean(kind);
   const planillaEnviada = Boolean(item.ordenCubiscan?.emailEnviadoEn);
   const hayPlanilla = Boolean(item.ordenCubiscan);
@@ -87,12 +95,19 @@ export default async function MantenimientoDetallePage({
     <div>
       <PageHeader
         title={mantenimientoTitulo(item)}
-        description={`${item.tipo} · ${machineName(item.instalacion)} · ${clienteLabel(cliente)}`}
+        description={
+          sinEquipo
+            ? `${item.tipo} · ${empresaLabel}`
+            : `${item.tipo} · ${machineName(item.instalacion)} · ${empresaLabel}`
+        }
         action={
           <div className="flex flex-wrap gap-2">
-            <SecondaryLink href={`/maquinas/${item.idClienteMaquina}`}>
-              Ver expediente
-            </SecondaryLink>
+            {!sinEquipo && item.idClienteMaquina != null ? (
+              <SecondaryLink href={`/maquinas/${item.idClienteMaquina}`}>
+                Ver expediente
+              </SecondaryLink>
+            ) : null}
+            <SecondaryLink href="/calendario">Calendario</SecondaryLink>
             <SecondaryLink href="/mantenimientos">Volver</SecondaryLink>
           </div>
         }
@@ -114,24 +129,35 @@ export default async function MantenimientoDetallePage({
 
         <div className="mb-5 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--ink-muted)]">
-            Pedido del cliente
+            {sinEquipo ? "Agenda provisional" : "Pedido del cliente"}
           </p>
           <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <dt className="text-xs text-[var(--ink-muted)]">Equipo</dt>
-              <dd className="mt-0.5 text-sm text-white">
-                <Link
-                  href={`/maquinas/${item.idClienteMaquina}`}
-                  className="text-[var(--accent)] hover:underline"
-                >
-                  {machineName(item.instalacion)}
-                </Link>
-                <span className="text-[var(--ink-muted)]">
-                  {" "}
-                  · Serie {item.instalacion.numeroSerie}
-                </span>
-              </dd>
-            </div>
+            {sinEquipo ? (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-[var(--ink-muted)]">Empresa</dt>
+                <dd className="mt-0.5 text-sm text-white">{empresaLabel}</dd>
+                <p className="mt-1 text-xs text-[var(--ink-muted)]">
+                  Todavía no hay cliente ni equipo registrados. Podés cargar el
+                  cliente después y vincularlo cuando corresponda.
+                </p>
+              </div>
+            ) : (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-[var(--ink-muted)]">Equipo</dt>
+                <dd className="mt-0.5 text-sm text-white">
+                  <Link
+                    href={`/maquinas/${item.idClienteMaquina}`}
+                    className="text-[var(--accent)] hover:underline"
+                  >
+                    {machineName(item.instalacion)}
+                  </Link>
+                  <span className="text-[var(--ink-muted)]">
+                    {" "}
+                    · Serie {item.instalacion!.numeroSerie}
+                  </span>
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-xs text-[var(--ink-muted)]">Tipo</dt>
               <dd className="mt-0.5 text-sm text-white">{item.tipo}</dd>
@@ -246,8 +272,7 @@ export default async function MantenimientoDetallePage({
                 Cerrar trabajo
               </button>
               <p className="sm:col-span-2 text-xs text-[var(--ink-muted)]">
-                Marca el pedido como realizado. Los comentarios técnicos van en la
-                orden de servicio al cerrar.
+                Marca el pedido como realizado.
               </p>
             </div>
           )}
@@ -259,13 +284,19 @@ export default async function MantenimientoDetallePage({
           </div>
         </GuardedForm>
         <p className="mt-4 text-sm text-[var(--ink-muted)]">
-          Cliente:{" "}
-          <Link
-            href={`/clientes/${item.instalacion.idCliente}`}
-            className="text-[var(--accent)] hover:underline"
-          >
-            {clienteLabel(cliente)}
-          </Link>
+          {sinEquipo ? (
+            <>Empresa: <span className="text-white">{empresaLabel}</span></>
+          ) : (
+            <>
+              Cliente:{" "}
+              <Link
+                href={`/clientes/${item.instalacion!.idCliente}`}
+                className="text-[var(--accent)] hover:underline"
+              >
+                {empresaLabel}
+              </Link>
+            </>
+          )}
         </p>
       </Panel>
     </div>

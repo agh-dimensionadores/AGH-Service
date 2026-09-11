@@ -166,6 +166,52 @@ export default async function MaquinaDetallePage({
                   className={inputClass}
                 />
               </Field>
+              <Field label="AnyDesk (opcional)">
+                <input
+                  name="anydesk"
+                  defaultValue={unidad.anydesk ?? ""}
+                  className={inputClass}
+                  placeholder="123 456 789"
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label="Nro. serie PC (opcional)">
+                <input
+                  name="serieCompu"
+                  defaultValue={unidad.serieCompu ?? ""}
+                  className={inputClass}
+                  placeholder="Número de serie de la computadora"
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label="Nro. serie cámara (opcional)">
+                <input
+                  name="serieCamara"
+                  defaultValue={unidad.serieCamara ?? ""}
+                  className={inputClass}
+                  placeholder="Número de serie de la cámara"
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label="Nro. serie EcoFlow (opcional)">
+                <input
+                  name="serieEcoflow"
+                  defaultValue={unidad.serieEcoflow ?? ""}
+                  className={inputClass}
+                  placeholder="Número de serie del EcoFlow"
+                  autoComplete="off"
+                />
+              </Field>
+              <Field label="Nro. serie pistola (opcional)">
+                <input
+                  name="seriePistola"
+                  defaultValue={unidad.seriePistola ?? ""}
+                  className={inputClass}
+                  placeholder="Número de serie de la pistola de código de barras"
+                  autoComplete="off"
+                />
+              </Field>
               <div>
                 <p className="text-sm font-medium text-[var(--ink-muted)]">
                   Modalidad

@@ -80,9 +80,13 @@ export default async function DashboardPage() {
 
   const clientesMap = await getClientesMap([
     ...unidades.map((u) => u.idCliente),
-    ...proximos.map((p) => p.instalacion.idCliente),
+    ...proximos
+      .map((p) => p.instalacion?.idCliente)
+      .filter((id): id is number => id != null),
     ...recientes.map((u) => u.idCliente),
-    ...actividad.map((a) => a.instalacion.idCliente),
+    ...actividad
+      .map((a) => a.instalacion?.idCliente)
+      .filter((id): id is number => id != null),
   ]);
 
   const estados = unidades.map((u) => equipoEstado(u.mantenimientos));
@@ -122,15 +126,23 @@ export default async function DashboardPage() {
 
   const notifications = proximos.map((item) => ({
     id: String(item.id),
-    title: `${machineName(item.instalacion)} · ${labelEstado(item.estado)}`,
-    subtitle: [
-      clienteLabel(clientesMap.get(item.instalacion.idCliente)),
-      item.tipo,
-      item.instalacion.sitio || null,
-    ]
-      .filter(Boolean)
-      .join(" · "),
-    href: `/maquinas/${item.idClienteMaquina}`,
+    title: item.instalacion
+      ? `${machineName(item.instalacion)} · ${labelEstado(item.estado)}`
+      : `${item.tipo} · ${item.empresaTemp?.trim() || "Empresa provisional"}`,
+    subtitle: item.instalacion
+      ? [
+          clienteLabel(clientesMap.get(item.instalacion.idCliente)),
+          item.tipo,
+          item.instalacion.sitio || null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : [item.empresaTemp?.trim() || "Empresa provisional", "Sin equipo"]
+          .filter(Boolean)
+          .join(" · "),
+    href: item.idClienteMaquina
+      ? `/maquinas/${item.idClienteMaquina}`
+      : `/mantenimientos/${item.id}`,
     when: formatDateTime(item.solicitado),
   }));
 
@@ -138,7 +150,6 @@ export default async function DashboardPage() {
     <div>
       <TopBar
         title={`Bienvenida, ${nombre}`}
-        subtitle="Estado general desde PostgreSQL"
         notifications={notifications}
       />
 
@@ -183,32 +194,47 @@ export default async function DashboardPage() {
               {proximos.map((item) => {
                 const days = daysUntil(item.solicitado);
                 const tone = countdownTone(days);
+                const href = item.idClienteMaquina
+                  ? `/maquinas/${item.idClienteMaquina}`
+                  : `/mantenimientos/${item.id}`;
+                const titulo = item.instalacion
+                  ? machineName(item.instalacion)
+                  : item.tipo;
+                const subtitulo = item.instalacion
+                  ? [
+                      clienteLabel(clientesMap.get(item.instalacion.idCliente)),
+                      item.instalacion.sitio || null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : item.empresaTemp?.trim() || "Empresa provisional";
                 return (
                   <li key={item.id}>
                     <Link
-                      href={`/maquinas/${item.idClienteMaquina}`}
+                      href={href}
                       className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-3 transition hover:border-[rgba(182,255,59,0.35)]"
                     >
-                      <MachineThumb
-                        maquina={item.instalacion.maquina}
-                        alt={machineName(item.instalacion)}
-                        className="h-12 w-14 shrink-0 rounded-lg object-cover"
-                      />
+                      {item.instalacion ? (
+                        <MachineThumb
+                          maquina={item.instalacion.maquina}
+                          alt={machineName(item.instalacion)}
+                          className="h-12 w-14 shrink-0 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="grid h-12 w-14 shrink-0 place-items-center rounded-lg border border-[var(--line)] bg-[rgba(255,255,255,0.04)] text-xs text-[var(--ink-muted)]">
+                          Agenda
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium text-white">
-                          {machineName(item.instalacion)}
+                          {titulo}
                           <span className="text-[var(--ink-muted)]">
                             {" "}
                             · {item.tipo}
                           </span>
                         </p>
                         <p className="truncate text-sm text-[var(--ink-muted)]">
-                          {clienteLabel(
-                            clientesMap.get(item.instalacion.idCliente)
-                          )}
-                          {item.instalacion.sitio
-                            ? ` · ${item.instalacion.sitio}`
-                            : ""}
+                          {subtitulo}
                         </p>
                       </div>
                       <div className="text-right">
@@ -361,8 +387,11 @@ export default async function DashboardPage() {
                       {mantenimientoTitulo(item)}
                     </p>
                     <p className="text-sm text-[var(--ink-muted)]">
-                      {machineName(item.instalacion)} ·{" "}
-                      {clienteLabel(clientesMap.get(item.instalacion.idCliente))}
+                      {item.instalacion
+                        ? `${machineName(item.instalacion)} · ${clienteLabel(
+                            clientesMap.get(item.instalacion.idCliente)
+                          )}`
+                        : item.empresaTemp?.trim() || "Empresa provisional"}
                     </p>
                     <p className="mt-1 text-xs text-[var(--ink-muted)]">
                       {formatDateTime(item.solicitado)} · {labelEstado(item.estado)}

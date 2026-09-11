@@ -111,6 +111,47 @@ export default async function AsignarMaquinaPage({
                 placeholder="Muelle, packing, CEDIS..."
               />
             </Field>
+            <Field label="AnyDesk (opcional)">
+              <input
+                name="anydesk"
+                className={inputClass}
+                placeholder="123 456 789"
+                inputMode="numeric"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Nro. serie PC (opcional)">
+              <input
+                name="serieCompu"
+                className={inputClass}
+                placeholder="Número de serie de la computadora"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Nro. serie cámara (opcional)">
+              <input
+                name="serieCamara"
+                className={inputClass}
+                placeholder="Número de serie de la cámara"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Nro. serie EcoFlow (opcional)">
+              <input
+                name="serieEcoflow"
+                className={inputClass}
+                placeholder="Número de serie del EcoFlow"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Nro. serie pistola (opcional)">
+              <input
+                name="seriePistola"
+                className={inputClass}
+                placeholder="Número de serie de la pistola de código de barras"
+                autoComplete="off"
+              />
+            </Field>
             <div className="sm:col-span-2 flex flex-wrap gap-2">
               <SubmitButton>Asignar al cliente</SubmitButton>
               <PrimaryLink href="/maquinas/nueva">Agregar otra al catálogo</PrimaryLink>

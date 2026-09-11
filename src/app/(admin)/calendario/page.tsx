@@ -42,15 +42,32 @@ function toItem(
     descripcion: string | null;
     programado: Date | null;
     asignadoA: string | null;
+    empresaTemp: string | null;
     instalacion: {
       id: number;
       sitio: string | null;
       idCliente: number;
       maquina: { marca: string; modelo: string | null };
-    };
+    } | null;
   },
   clientesMap: Awaited<ReturnType<typeof getClientesMap>>
 ): CalendarioItem {
+  if (!item.instalacion) {
+    return {
+      id: item.id,
+      tipo: item.tipo,
+      estado: item.estado,
+      descripcion: item.descripcion,
+      programado: item.programado ? item.programado.toISOString() : null,
+      asignadoA: item.asignadoA,
+      machineLabel: "Sin equipo",
+      clienteLabel: item.empresaTemp?.trim() || "Empresa provisional",
+      sitio: null,
+      href: `/mantenimientos/${item.id}`,
+      sinCliente: true,
+    };
+  }
+
   return {
     id: item.id,
     tipo: item.tipo,
@@ -62,6 +79,7 @@ function toItem(
     clienteLabel: clienteLabel(clientesMap.get(item.instalacion.idCliente)),
     sitio: item.instalacion.sitio,
     href: `/mantenimientos/${item.id}`,
+    sinCliente: false,
   };
 }
 
@@ -91,6 +109,7 @@ export default async function CalendarioPage({
       where: {
         estado: { in: ["abierto", "en_curso"] },
         programado: null,
+        idClienteMaquina: { not: null },
       },
       orderBy: { solicitado: "asc" },
       include,
@@ -98,8 +117,12 @@ export default async function CalendarioPage({
   ]);
 
   const clientesMap = await getClientesMap([
-    ...programadosRaw.map((i) => i.instalacion.idCliente),
-    ...pendientesRaw.map((i) => i.instalacion.idCliente),
+    ...programadosRaw
+      .map((i) => i.instalacion?.idCliente)
+      .filter((id): id is number => id != null),
+    ...pendientesRaw
+      .map((i) => i.instalacion?.idCliente)
+      .filter((id): id is number => id != null),
   ]);
 
   const programados = programadosRaw.map((i) => toItem(i, clientesMap));
@@ -109,7 +132,7 @@ export default async function CalendarioPage({
     <div>
       <PageHeader
         title="Calendario"
-        description="Organizá en qué día vas a hacer cada arreglo o instalación, con horario y quién va (opcionales)."
+        description="Organizá visitas, instalaciones y reuniones. Podés agendar con un nombre de empresa provisional si el cliente aún no está cargado."
       />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
@@ -128,7 +151,7 @@ export default async function CalendarioPage({
         <Panel className="!p-4">
           <p className="text-xs text-[var(--ink-muted)]">Cómo usarlo</p>
           <p className="mt-1 text-sm text-[var(--ink-muted)]">
-            Clic en un día → elegí un pendiente → guardá.
+            Clic en un día → agendá una reunión/instalación o asigná un pendiente.
           </p>
         </Panel>
       </div>

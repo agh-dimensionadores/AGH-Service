@@ -92,9 +92,13 @@ export const TIPOS_MANTENIMIENTO = [
   "Calibración",
   "Inspección",
   "Instalación",
+  "Reunión",
   "Actualización",
   "Otro",
 ] as const;
+
+/** Tipos que se pueden agendar sin cliente/equipo registrado. */
+export const TIPOS_AGENDA_SIN_CLIENTE = ["Reunión", "Instalación"] as const;
 
 export const ESTADOS_MANTENIMIENTO = [
   "abierto",

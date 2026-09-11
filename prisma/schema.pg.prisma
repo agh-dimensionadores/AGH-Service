@@ -44,6 +44,13 @@ model ClienteMaquina {
   idMaquina        Int                     @map("id_maquina")
   sitio            String?                 @db.VarChar(200)
   numeroSerie      String                  @unique @map("numero_serie") @db.VarChar(100)
+  /// Número AnyDesk de la PC vinculada (opcional)
+  anydesk          String?                 @db.VarChar(50)
+  /// Nros. de serie de periféricos / PC (opcionales)
+  serieCompu       String?                 @map("serie_compu") @db.VarChar(100)
+  serieCamara      String?                 @map("serie_camara") @db.VarChar(100)
+  serieEcoflow     String?                 @map("serie_ecoflow") @db.VarChar(100)
+  seriePistola     String?                 @map("serie_pistola") @db.VarChar(100)
   /// venta | alquiler
   modalidad        String                  @default("venta") @db.VarChar(20)
   fechaCompra      DateTime?               @map("fecha_compra") @db.Date
@@ -75,20 +82,23 @@ model MaquinaAlquiler {
 }
 
 model ClienteMantenimiento {
-  id                Int            @id @default(autoincrement())
-  idClienteMaquina  Int            @map("id_cliente_maquina")
-  tipo              String         @db.VarChar(50)
+  id                Int             @id @default(autoincrement())
+  /// Opcional: reuniones/instalaciones se pueden agendar sin equipo registrado
+  idClienteMaquina  Int?            @map("id_cliente_maquina")
+  /// Nombre provisional de empresa cuando aún no hay cliente en el sistema
+  empresaTemp       String?         @map("empresa_temp") @db.VarChar(200)
+  tipo              String          @db.VarChar(50)
   descripcion       String?
-  solicitado        DateTime       @default(now())
+  solicitado        DateTime        @default(now())
   arreglado         DateTime?
-  estado            String         @default("abierto") @db.VarChar(30)
+  estado            String          @default("abierto") @db.VarChar(30)
   /// Día/hora planificados para la visita (agenda admin)
-  programado        DateTime?      @db.Timestamptz(6)
+  programado        DateTime?       @db.Timestamptz(6)
   /// Quién va (texto libre)
-  asignadoA         String?        @map("asignado_a") @db.VarChar(150)
+  asignadoA         String?         @map("asignado_a") @db.VarChar(150)
   /// Comentario interno de AGH al cerrar / resolver
-  comentarioArreglo String?        @map("comentario_arreglo")
-  instalacion       ClienteMaquina @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
+  comentarioArreglo String?         @map("comentario_arreglo")
+  instalacion       ClienteMaquina? @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
   ordenCubiscan     CubiscanOrdenServicio?
 
   @@map("clientes_mantenimientos")

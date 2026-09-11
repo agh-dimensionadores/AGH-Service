@@ -95,6 +95,26 @@ export default async function PortalMaquinaPage({
               <dd className="text-white">{unidad.sitio || "—"}</dd>
             </div>
             <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
+              <dt className="text-[var(--ink-muted)]">AnyDesk</dt>
+              <dd className="font-mono text-white">{unidad.anydesk || "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
+              <dt className="text-[var(--ink-muted)]">Serie PC</dt>
+              <dd className="font-mono text-white">{unidad.serieCompu || "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
+              <dt className="text-[var(--ink-muted)]">Serie cámara</dt>
+              <dd className="font-mono text-white">{unidad.serieCamara || "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
+              <dt className="text-[var(--ink-muted)]">Serie EcoFlow</dt>
+              <dd className="font-mono text-white">{unidad.serieEcoflow || "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
+              <dt className="text-[var(--ink-muted)]">Serie pistola</dt>
+              <dd className="font-mono text-white">{unidad.seriePistola || "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-3 border-b border-[var(--line)] pb-2">
               <dt className="text-[var(--ink-muted)]">Fecha de compra</dt>
               <dd className="text-white">{formatDate(unidad.fechaCompra)}</dd>
             </div>

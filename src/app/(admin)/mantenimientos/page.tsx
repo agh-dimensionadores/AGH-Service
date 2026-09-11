@@ -25,7 +25,9 @@ export default async function MantenimientosPage() {
     },
   });
   const clientesMap = await getClientesMap(
-    items.map((i) => i.instalacion.idCliente)
+    items
+      .map((i) => i.instalacion?.idCliente)
+      .filter((id): id is number => id != null)
   );
 
   return (
@@ -71,15 +73,28 @@ export default async function MantenimientosPage() {
                     <p className="text-[var(--ink-muted)]">{item.tipo}</p>
                   </td>
                   <td className="hidden md:table-cell">
-                    <Link
-                      href={`/maquinas/${item.idClienteMaquina}`}
-                      className="hover:text-[var(--accent)]"
-                    >
-                      {machineName(item.instalacion)}
-                    </Link>
-                    <p className="text-[var(--ink-muted)]">
-                      {clienteLabel(clientesMap.get(item.instalacion.idCliente))}
-                    </p>
+                    {item.instalacion && item.idClienteMaquina != null ? (
+                      <>
+                        <Link
+                          href={`/maquinas/${item.idClienteMaquina}`}
+                          className="hover:text-[var(--accent)]"
+                        >
+                          {machineName(item.instalacion)}
+                        </Link>
+                        <p className="text-[var(--ink-muted)]">
+                          {clienteLabel(
+                            clientesMap.get(item.instalacion.idCliente)
+                          )}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-white">Sin equipo</span>
+                        <p className="text-[var(--ink-muted)]">
+                          {item.empresaTemp?.trim() || "Empresa provisional"}
+                        </p>
+                      </>
+                    )}
                   </td>
                   <td>{formatDate(item.solicitado)}</td>
                   <td className="hidden sm:table-cell">

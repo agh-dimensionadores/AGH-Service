@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
+  crearEventoAgenda,
   desprogramarMantenimiento,
   programarMantenimiento,
 } from "@/app/actions";
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
 import { Field, Panel, inputClass } from "@/components/ui";
 import { IconChevron } from "@/components/icons";
-import { labelEstado } from "@/lib/utils";
+import { labelEstado, TIPOS_AGENDA_SIN_CLIENTE } from "@/lib/utils";
 
 export type CalendarioItem = {
   id: number;
@@ -23,6 +24,7 @@ export type CalendarioItem = {
   clienteLabel: string;
   sitio: string | null;
   href: string;
+  sinCliente?: boolean;
 };
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -292,7 +294,9 @@ export function CalendarioMensual({
                               {hora ? ` · ${hora}` : ""}
                             </Link>
                             <p className="truncate text-sm text-[var(--ink-muted)]">
-                              {item.machineLabel} · {item.clienteLabel}
+                              {item.sinCliente
+                                ? item.clienteLabel
+                                : `${item.machineLabel} · ${item.clienteLabel}`}
                               {item.sitio ? ` · ${item.sitio}` : ""}
                             </p>
                             <p className="mt-1 text-xs text-[var(--ink-muted)]">
@@ -316,6 +320,66 @@ export function CalendarioMensual({
                   })}
                 </ul>
               )}
+            </section>
+
+            <section>
+              <h4 className="mb-2 text-sm font-medium text-white">
+                Agendar reunión / instalación
+              </h4>
+              <p className="mb-3 text-xs text-[var(--ink-muted)]">
+                Sin necesidad de registrar el cliente: usá un nombre de empresa
+                provisorio.
+              </p>
+              <GuardedForm action={crearEventoAgenda} className="grid gap-3">
+                <input type="hidden" name="fecha" value={selected} />
+                <Field label="Tipo *">
+                  <select
+                    name="tipo"
+                    required
+                    className={inputClass}
+                    defaultValue="Reunión"
+                  >
+                    {TIPOS_AGENDA_SIN_CLIENTE.map((tipo) => (
+                      <option key={tipo} value={tipo}>
+                        {tipo}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Empresa (provisoria) *">
+                  <input
+                    type="text"
+                    name="empresaTemp"
+                    required
+                    maxLength={200}
+                    placeholder="Nombre de la empresa"
+                    className={inputClass}
+                  />
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Horario (opcional)">
+                    <input type="time" name="hora" className={inputClass} />
+                  </Field>
+                  <Field label="Quién va (opcional)">
+                    <input
+                      type="text"
+                      name="asignadoA"
+                      placeholder="Nombre o equipo"
+                      className={inputClass}
+                      maxLength={150}
+                    />
+                  </Field>
+                </div>
+                <Field label="Notas (opcional)">
+                  <textarea
+                    name="descripcion"
+                    rows={2}
+                    className={inputClass}
+                    placeholder="Motivo, dirección, contacto…"
+                  />
+                </Field>
+                <SubmitButton pendingLabel="Guardando…">Agendar</SubmitButton>
+              </GuardedForm>
             </section>
 
             <section>

@@ -34,7 +34,7 @@ import {
   parseCalibracionPesoForm,
   stripCalibracionFromPayload,
 } from "@/lib/calibracion-peso";
-import { buildNumeroSerie } from "@/lib/utils";
+import { buildNumeroSerie, TIPOS_AGENDA_SIN_CLIENTE } from "@/lib/utils";
 import {
   checkSectionsFor,
   planillaFirmaLabel,
@@ -490,6 +490,11 @@ export async function asignarMaquina(formData: FormData) {
       idMaquina,
       numeroSerie,
       sitio: optionalStr(formData, "ubicacion"),
+      anydesk: optionalStr(formData, "anydesk"),
+      serieCompu: optionalStr(formData, "serieCompu"),
+      serieCamara: optionalStr(formData, "serieCamara"),
+      serieEcoflow: optionalStr(formData, "serieEcoflow"),
+      seriePistola: optionalStr(formData, "seriePistola"),
       modalidad,
       fechaCompra:
         modalidad === "venta" ? optionalDate(formData, "fechaCompra") : null,
@@ -543,6 +548,11 @@ export async function updateMaquina(id: number, formData: FormData) {
       idMaquina,
       numeroSerie,
       sitio: optionalStr(formData, "ubicacion"),
+      anydesk: optionalStr(formData, "anydesk"),
+      serieCompu: optionalStr(formData, "serieCompu"),
+      serieCamara: optionalStr(formData, "serieCamara"),
+      serieEcoflow: optionalStr(formData, "serieEcoflow"),
+      seriePistola: optionalStr(formData, "seriePistola"),
       // modalidad no se cambia acá
       modalidad: existing.modalidad,
       fechaCompra:
@@ -681,7 +691,9 @@ export async function updateMantenimiento(id: number, formData: FormData) {
 
   touch(
     `/mantenimientos/${id}`,
-    `/maquinas/${existing.idClienteMaquina}`,
+    ...(existing.idClienteMaquina != null
+      ? [`/maquinas/${existing.idClienteMaquina}`]
+      : []),
     "/mantenimientos",
     "/calendario"
   );
@@ -702,10 +714,12 @@ export async function cerrarMantenimiento(id: number, formData: FormData) {
     },
   });
   if (!existing) throw new Error("Mantenimiento no encontrado");
-  const kind = planillaKind(
-    existing.instalacion.maquina.marca,
-    existing.instalacion.maquina.modelo
-  );
+  const kind = existing.instalacion
+    ? planillaKind(
+        existing.instalacion.maquina.marca,
+        existing.instalacion.maquina.modelo
+      )
+    : null;
   const tienePlanilla = Boolean(kind);
   if (existing.estado === "cerrado") {
     redirect(
@@ -733,7 +747,9 @@ export async function cerrarMantenimiento(id: number, formData: FormData) {
   touch(
     `/mantenimientos/${id}`,
     `/mantenimientos/${id}/planilla-cubiscan`,
-    `/maquinas/${existing.idClienteMaquina}`,
+    ...(existing.idClienteMaquina != null
+      ? [`/maquinas/${existing.idClienteMaquina}`]
+      : []),
     "/mantenimientos",
     "/calendario"
   );
@@ -1405,6 +1421,43 @@ export async function deleteMantenimiento(_id: number) {
   throw new Error("Los trabajos de mantenimiento no se pueden eliminar");
 }
 
+/** Agenda: crear reunión o instalación con nombre provisional (sin cliente). */
+export async function crearEventoAgenda(formData: FormData) {
+  await requireAdmin();
+  const fecha = str(formData, "fecha");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    throw new Error("Fecha inválida");
+  }
+  const tipo = str(formData, "tipo");
+  if (!(TIPOS_AGENDA_SIN_CLIENTE as readonly string[]).includes(tipo)) {
+    throw new Error("Tipo inválido. Usá Reunión o Instalación.");
+  }
+  const empresaTemp = optionalStr(formData, "empresaTemp");
+  if (!empresaTemp) {
+    throw new Error("Ingresá un nombre de empresa (puede ser provisorio)");
+  }
+  const hora = optionalStr(formData, "hora");
+  const asignadoA = optionalStr(formData, "asignadoA");
+  const descripcion = optionalStr(formData, "descripcion");
+  const programado = combineFechaHora(fecha, hora);
+
+  const item = await prismaPg.clienteMantenimiento.create({
+    data: {
+      idClienteMaquina: null,
+      empresaTemp,
+      tipo,
+      descripcion,
+      estado: "abierto",
+      solicitado: new Date(),
+      programado,
+      asignadoA,
+    },
+  });
+
+  touch("/calendario", "/mantenimientos", `/mantenimientos/${item.id}`);
+  redirect(`/calendario?mes=${fecha.slice(0, 7)}&dia=${fecha}`);
+}
+
 /** Agenda: asignar un pendiente a un día (hora y quién opcionales). */
 export async function programarMantenimiento(formData: FormData) {
   const id = requiredInt(formData, "mantenimientoId");
@@ -1421,12 +1474,15 @@ export async function programarMantenimiento(formData: FormData) {
     data: { programado, asignadoA },
   });
 
-  touch(
+  const paths = [
     "/calendario",
     "/mantenimientos",
     `/mantenimientos/${id}`,
-    `/maquinas/${item.idClienteMaquina}`
-  );
+  ];
+  if (item.idClienteMaquina != null) {
+    paths.push(`/maquinas/${item.idClienteMaquina}`);
+  }
+  touch(...paths);
   redirect(`/calendario?mes=${fecha.slice(0, 7)}&dia=${fecha}`);
 }
 
@@ -1439,12 +1495,15 @@ export async function desprogramarMantenimiento(id: number, formData: FormData) 
   const mes = optionalStr(formData, "mes") || new Date().toISOString().slice(0, 7);
   const dia = optionalStr(formData, "dia");
 
-  touch(
+  const paths = [
     "/calendario",
     "/mantenimientos",
     `/mantenimientos/${id}`,
-    `/maquinas/${item.idClienteMaquina}`
-  );
+  ];
+  if (item.idClienteMaquina != null) {
+    paths.push(`/maquinas/${item.idClienteMaquina}`);
+  }
+  touch(...paths);
   redirect(dia ? `/calendario?mes=${mes}&dia=${dia}` : `/calendario?mes=${mes}`);
 }
 
