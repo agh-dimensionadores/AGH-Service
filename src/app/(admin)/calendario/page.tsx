@@ -109,7 +109,6 @@ export default async function CalendarioPage({
       where: {
         estado: { in: ["abierto", "en_curso"] },
         programado: null,
-        idClienteMaquina: { not: null },
       },
       orderBy: { solicitado: "asc" },
       include,
