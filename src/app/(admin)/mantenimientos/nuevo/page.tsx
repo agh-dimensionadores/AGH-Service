@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createMantenimiento } from "@/app/actions";
+import { EquipoSelectField } from "@/components/equipo-select-field";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { SolicitudFotosField } from "@/components/solicitud-fotos-field";
 import { prismaPg } from "@/lib/prisma";
@@ -11,7 +12,7 @@ import {
   SecondaryLink,
   inputClass,
 } from "@/components/ui";
-import { TIPOS_MANTENIMIENTO, machineName } from "@/lib/utils";
+import { TIPOS_MANTENIMIENTO } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -23,15 +24,26 @@ export default async function NuevoMantenimientoPage({
   const { maquinaId } = await searchParams;
   const unidades = await prismaPg.clienteMaquina.findMany({
     orderBy: { fechaCreacion: "desc" },
-    include: { maquina: true },
+    include: {
+      maquina: { select: { marca: true, modelo: true } },
+    },
   });
   const clientesMap = await getClientesMap(unidades.map((u) => u.idCliente));
+
+  const equipoOptions = unidades.map((u) => ({
+    id: u.id,
+    marca: u.maquina.marca,
+    modelo: u.maquina.modelo,
+    numeroSerie: u.numeroSerie,
+    sitio: u.sitio,
+    clienteLabel: clienteLabel(clientesMap.get(u.idCliente)),
+  }));
 
   return (
     <div>
       <PageHeader
         title="Nuevo mantenimiento"
-        description="Se registra siempre como abierto. Después lo cerrás cuando lo realicen."
+        description="Buscá el equipo por marca, modelo, cliente o nro. de serie. Se registra como abierto."
         action={<SecondaryLink href="/mantenimientos">Volver</SecondaryLink>}
       />
       <Panel className="max-w-2xl">
@@ -46,24 +58,11 @@ export default async function NuevoMantenimientoPage({
         ) : (
           <GuardedForm action={createMantenimiento} className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <Field label="Equipo *">
-                <select
-                  name="maquinaId"
-                  required
-                  defaultValue={maquinaId ?? ""}
-                  className={inputClass}
-                >
-                  <option value="" disabled>
-                    Seleccionar...
-                  </option>
-                  {unidades.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {machineName(u)} ({u.numeroSerie}) —{" "}
-                      {clienteLabel(clientesMap.get(u.idCliente))}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <p className="mb-2 text-sm font-medium text-white">Equipo *</p>
+              <EquipoSelectField
+                unidades={equipoOptions}
+                defaultId={maquinaId}
+              />
             </div>
             <Field label="Tipo *">
               <select name="tipo" required className={inputClass} defaultValue="Preventivo">
