@@ -58,6 +58,11 @@ async function ensureTables() {
       ADD COLUMN IF NOT EXISTS serie_pistola VARCHAR(100)
   `);
   await db.$executeRawUnsafe(`
+    ALTER TABLE clientes
+      ADD COLUMN IF NOT EXISTS cuit VARCHAR(20),
+      ADD COLUMN IF NOT EXISTS direccion VARCHAR(300)
+  `);
+  await db.$executeRawUnsafe(`
     ALTER TABLE clientes_mantenimientos
       ALTER COLUMN id_cliente_maquina DROP NOT NULL
   `);

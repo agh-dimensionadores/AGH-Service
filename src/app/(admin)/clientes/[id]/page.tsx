@@ -125,6 +125,23 @@ export default async function ClienteDetallePage({
                 className={inputClass}
               />
             </Field>
+            <Field label="CUIT">
+              <input
+                name="cuit"
+                maxLength={20}
+                placeholder="20-12345678-9"
+                defaultValue={cliente.cuit ?? ""}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Dirección">
+              <input
+                name="direccion"
+                maxLength={300}
+                defaultValue={cliente.direccion ?? ""}
+                className={inputClass}
+              />
+            </Field>
             <Field label="Activo">
               <select
                 name="activo"

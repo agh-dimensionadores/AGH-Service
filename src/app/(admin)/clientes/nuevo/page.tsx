@@ -27,6 +27,17 @@ export default function NuevoClientePage() {
           <Field label="Email">
             <input name="email" type="email" maxLength={200} className={inputClass} />
           </Field>
+          <Field label="CUIT">
+            <input
+              name="cuit"
+              maxLength={20}
+              placeholder="20-12345678-9"
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Dirección">
+            <input name="direccion" maxLength={300} className={inputClass} />
+          </Field>
           <Field label="Activo">
             <select name="activo" defaultValue="1" className={inputClass}>
               <option value="1">Sí</option>

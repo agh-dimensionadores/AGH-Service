@@ -14,6 +14,8 @@ model Cliente {
   nombre        String           @db.VarChar(100)
   empresa       String?          @db.VarChar(200)
   email         String?          @db.VarChar(200)
+  cuit          String?          @db.VarChar(20)
+  direccion     String?          @db.VarChar(300)
   token         String           @db.VarChar(100)
   activo        Int?
   fechaCreacion DateTime?        @map("fecha_creacion")

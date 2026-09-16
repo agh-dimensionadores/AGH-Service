@@ -97,6 +97,8 @@ export async function createCliente(formData: FormData) {
 
   const empresa = optionalStr(formData, "empresa");
   const email = optionalStr(formData, "email");
+  const cuit = optionalStr(formData, "cuit");
+  const direccion = optionalStr(formData, "direccion");
   const token = newClientToken();
   const activo = optionalInt(formData, "activo") ?? 1;
 
@@ -105,6 +107,8 @@ export async function createCliente(formData: FormData) {
       nombre,
       empresa,
       email,
+      cuit,
+      direccion,
       token,
       activo,
       fechaCreacion: new Date(),
@@ -132,6 +136,8 @@ export async function updateCliente(id: number, formData: FormData) {
       nombre,
       empresa: optionalStr(formData, "empresa"),
       email: optionalStr(formData, "email"),
+      cuit: optionalStr(formData, "cuit"),
+      direccion: optionalStr(formData, "direccion"),
       activo: optionalInt(formData, "activo") ?? 1,
     },
   });

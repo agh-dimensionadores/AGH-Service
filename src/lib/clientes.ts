@@ -5,6 +5,8 @@ export type ClienteRow = {
   nombre: string;
   empresa: string | null;
   email: string | null;
+  cuit: string | null;
+  direccion: string | null;
   token: string;
   activo: number | null;
   fechaCreacion: Date | null;
