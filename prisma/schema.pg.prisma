@@ -46,7 +46,9 @@ model ClienteMaquina {
   idCliente        Int                     @map("id_cliente")
   idMaquina        Int                     @map("id_maquina")
   sitio            String?                 @db.VarChar(200)
-  numeroSerie      String                  @unique @map("numero_serie") @db.VarChar(100)
+  /// Dirección física donde está instalada la máquina
+  direccion        String?                 @db.VarChar(300)
+  numeroSerie      String                  @map("numero_serie") @db.VarChar(100)
   /// Número AnyDesk de la PC vinculada (opcional)
   anydesk          String?                 @db.VarChar(50)
   /// Nros. de serie de periféricos / PC (opcionales)
@@ -59,6 +61,8 @@ model ClienteMaquina {
   fechaCompra      DateTime?               @map("fecha_compra") @db.Date
   fechaFabricacion DateTime?               @map("fecha_fabricacion") @db.Date
   fechaCreacion    DateTime?               @default(now()) @map("fecha_creacion")
+  /// Si está seteada, el alquiler terminó y la serie volvió a stock (historial conservado)
+  liberadaEn       DateTime?               @map("liberada_en") @db.Timestamptz(6)
   cliente          Cliente                 @relation(fields: [idCliente], references: [id])
   maquina          Maquina                 @relation(fields: [idMaquina], references: [idmachine])
   mantenimientos   ClienteMantenimiento[]
@@ -66,6 +70,9 @@ model ClienteMaquina {
   fotos            ClienteMaquinaFoto[]
   stockOrigen      MaquinaStock?
 
+  /// Unicidad de serie solo entre asignaciones activas (índice parcial en prepare-db)
+  @@index([numeroSerie])
+  @@index([liberadaEn])
   @@map("clientes_maquinas")
 }
 
@@ -83,18 +90,23 @@ model ClienteMaquinaFoto {
   @@map("clientes_maquinas_fotos")
 }
 
-/// Unidades en depósito (Cubiscan / Conlida / Cubetape) antes de asignar a un cliente.
+/// Unidades en depósito (AGH / Cubiscan / Conlida / Cubetape) antes de asignar.
 model MaquinaStock {
   id                   Int             @id @default(autoincrement())
   idMaquina            Int             @map("id_maquina")
-  /// Nro. de serie de la unidad en depósito (único)
-  numeroSerie          String?         @unique @map("numero_serie") @db.VarChar(100)
-  fechaImportacion     DateTime        @map("fecha_importacion") @db.Date
-  despachoImportacion  String          @map("despacho_importacion") @db.VarChar(100)
-  po                   String          @db.VarChar(100)
-  origen               String          @db.VarChar(150)
+  /// Nro. de serie de la unidad en depósito (único; identifica la máquina)
+  numeroSerie          String          @unique @map("numero_serie") @db.VarChar(100)
+  /// Importación (Cubiscan / Conlida / Cubetape)
+  fechaImportacion     DateTime?       @map("fecha_importacion") @db.Date
+  despachoImportacion  String?         @map("despacho_importacion") @db.VarChar(100)
+  po                   String?         @db.VarChar(100)
+  origen               String?         @db.VarChar(150)
   /// Valor FO (foreign / factura de origen)
-  valorFo              Decimal         @map("valor_fo") @db.Decimal(14, 2)
+  valorFo              Decimal?        @map("valor_fo") @db.Decimal(14, 2)
+  /// AGH: fecha de fabricación
+  fechaFabricacion     DateTime?       @map("fecha_fabricacion") @db.Date
+  /// AGH: precio opcional
+  precio               Decimal?        @db.Decimal(14, 2)
   /// disponible | asignado
   estado               String          @default("disponible") @db.VarChar(20)
   idClienteMaquina     Int?            @unique @map("id_cliente_maquina")
@@ -198,6 +210,8 @@ model Usuario {
   email        String   @unique @db.VarChar(200)
   passwordHash String   @map("password_hash") @db.VarChar(255)
   nombre       String   @db.VarChar(150)
+  /// m | f (opcional; define Bienvenido / Bienvenida)
+  genero       String?  @db.VarChar(1)
   rol          String   @db.VarChar(20)
   /// ID del cliente en la tabla clientes (sin FK)
   clienteId    Int?     @map("cliente_id")

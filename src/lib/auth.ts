@@ -12,6 +12,8 @@ export type SessionUser = {
   nombre: string;
   rol: "admin" | "cliente";
   clienteId: number | null;
+  /** m | f | null */
+  genero: "m" | "f" | null;
 };
 
 function getSecret() {
@@ -28,6 +30,10 @@ export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
 
+function parseGeneroPayload(value: unknown): "m" | "f" | null {
+  return value === "m" || value === "f" ? value : null;
+}
+
 export async function createSessionToken(user: SessionUser) {
   return new SignJWT({
     id: user.id,
@@ -35,6 +41,7 @@ export async function createSessionToken(user: SessionUser) {
     nombre: user.nombre,
     rol: user.rol,
     clienteId: user.clienteId,
+    genero: user.genero,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -69,6 +76,7 @@ export async function readSessionToken(
       rol: payload.rol,
       clienteId:
         clienteId != null && Number.isFinite(clienteId) ? clienteId : null,
+      genero: parseGeneroPayload(payload.genero),
     };
   } catch {
     return null;
@@ -109,5 +117,6 @@ export async function authenticate(email: string, password: string) {
     nombre: user.nombre,
     rol: user.rol as "admin" | "cliente",
     clienteId: user.clienteId,
+    genero: parseGeneroPayload(user.genero),
   } satisfies SessionUser;
 }

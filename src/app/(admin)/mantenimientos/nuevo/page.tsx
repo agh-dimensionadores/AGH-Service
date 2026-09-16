@@ -23,6 +23,7 @@ export default async function NuevoMantenimientoPage({
 }) {
   const { maquinaId } = await searchParams;
   const unidades = await prismaPg.clienteMaquina.findMany({
+    where: { liberadaEn: null },
     orderBy: { fechaCreacion: "desc" },
     include: {
       maquina: { select: { marca: true, modelo: true } },

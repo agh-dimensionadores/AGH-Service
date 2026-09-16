@@ -2,6 +2,7 @@ import Link from "next/link";
 import { deleteStockMaquina } from "@/app/actions";
 import { DangerButton } from "@/components/form";
 import { prismaPg } from "@/lib/prisma";
+import { marcaEsAgh } from "@/lib/marcas";
 import { machineName } from "@/lib/utils";
 import {
   Badge,
@@ -13,13 +14,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function formatMoney(value: { toString(): string }) {
+function formatMoney(value: { toString(): string } | null | undefined) {
+  if (value == null) return "—";
   const n = Number(value.toString());
   if (Number.isNaN(n)) return value.toString();
   return n.toLocaleString("es-AR", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function toDate(value: Date | null | undefined) {
+  return value ? value.toISOString().slice(0, 10) : "—";
 }
 
 export default async function StockMaquinasPage() {
@@ -38,7 +44,7 @@ export default async function StockMaquinasPage() {
     <div>
       <PageHeader
         title="Stock"
-        description="Cubiscan, Conlida y Cubetape. AGH se asigna directo, sin stock."
+        description="AGH y marcas importadas. Hay que tener stock para asignar a un cliente."
         action={
           <div className="flex flex-wrap gap-2">
             <SecondaryLink href="/maquinas">Volver</SecondaryLink>
@@ -50,7 +56,7 @@ export default async function StockMaquinasPage() {
       {rows.length === 0 ? (
         <EmptyState
           title="Sin stock"
-          description="Cargá unidades importadas para poder asignarlas a clientes."
+          description="Cargá unidades para poder asignarlas a clientes."
           action={
             <PrimaryLink href="/maquinas/stock/nuevo">Agregar stock</PrimaryLink>
           }
@@ -67,11 +73,7 @@ export default async function StockMaquinasPage() {
                 <tr>
                   <th>Modelo</th>
                   <th>Nro. serie</th>
-                  <th>Importación</th>
-                  <th className="hidden sm:table-cell">Despacho</th>
-                  <th>PO</th>
-                  <th className="hidden md:table-cell">Origen</th>
-                  <th>Valor FO</th>
+                  <th>Detalle</th>
                   <th>Estado</th>
                   <th></th>
                 </tr>
@@ -79,6 +81,7 @@ export default async function StockMaquinasPage() {
               <tbody>
                 {rows.map((row) => {
                   const remove = deleteStockMaquina.bind(null, row.id);
+                  const agh = marcaEsAgh(row.maquina.marca);
                   return (
                     <tr key={row.id}>
                       <td>
@@ -90,20 +93,26 @@ export default async function StockMaquinasPage() {
                         </p>
                       </td>
                       <td className="font-mono text-sm text-white">
-                        {row.numeroSerie || "—"}
+                        {row.numeroSerie}
                       </td>
-                      <td className="text-[var(--ink-muted)]">
-                        {row.fechaImportacion.toISOString().slice(0, 10)}
-                      </td>
-                      <td className="hidden text-[var(--ink-muted)] sm:table-cell">
-                        {row.despachoImportacion}
-                      </td>
-                      <td className="font-mono text-sm">{row.po}</td>
-                      <td className="hidden text-[var(--ink-muted)] md:table-cell">
-                        {row.origen}
-                      </td>
-                      <td className="font-mono text-sm">
-                        {formatMoney(row.valorFo)}
+                      <td className="text-sm text-[var(--ink-muted)]">
+                        {agh ? (
+                          <>
+                            Fab. {toDate(row.fechaFabricacion)}
+                            {row.precio != null
+                              ? ` · Precio ${formatMoney(row.precio)}`
+                              : ""}
+                          </>
+                        ) : (
+                          <>
+                            Imp. {toDate(row.fechaImportacion)}
+                            {row.po ? ` · PO ${row.po}` : ""}
+                            {row.origen ? ` · ${row.origen}` : ""}
+                            {row.valorFo != null
+                              ? ` · FO ${formatMoney(row.valorFo)}`
+                              : ""}
+                          </>
+                        )}
                       </td>
                       <td>
                         <Badge

@@ -33,8 +33,7 @@ export default function NuevaMaquinaPage() {
               <option value="Cubetape" />
             </datalist>
             <p className="mt-1 text-xs text-[var(--ink-muted)]">
-              Cubiscan / Conlida / Cubetape se asignan desde stock. AGH: venta o
-              alquiler directo.
+              AGH y Cubiscan / Conlida / Cubetape se asignan desde stock.
             </p>
           </Field>
           <Field label="Modelo">

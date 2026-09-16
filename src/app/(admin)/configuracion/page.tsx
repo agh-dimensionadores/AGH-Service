@@ -2,6 +2,7 @@ import {
   createAdminUsuario,
   resetAdminUsuarioPassword,
   saveMaquinasFavoritas,
+  updateMiPerfil,
 } from "@/app/actions";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import {
@@ -35,6 +36,7 @@ export default async function ConfiguracionPage({
         id: true,
         email: true,
         nombre: true,
+        genero: true,
         creadoEn: true,
       },
     }),
@@ -48,6 +50,8 @@ export default async function ConfiguracionPage({
       },
     }),
   ]);
+
+  const yo = admins.find((u) => u.id === session?.id);
 
   const favoritosCount = catalogo.filter((m) => m.favorito).length;
 
@@ -66,6 +70,11 @@ export default async function ConfiguracionPage({
       {admin === "password" ? (
         <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
           Tu contraseña fue actualizada.
+        </p>
+      ) : null}
+      {admin === "perfil" ? (
+        <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+          Perfil actualizado. El saludo del inicio usa Bienvenido / Bienvenida.
         </p>
       ) : null}
       {favoritos === "ok" ? (
@@ -166,7 +175,36 @@ export default async function ConfiguracionPage({
                     </div>
 
                     {isMe ? (
-                      <div className="mt-4 border-t border-[var(--line)] pt-3">
+                      <div className="mt-4 space-y-4 border-t border-[var(--line)] pt-3">
+                        <GuardedForm
+                          action={updateMiPerfil}
+                          className="grid gap-3 sm:grid-cols-2"
+                        >
+                          <Field label="Tu nombre">
+                            <input
+                              name="nombre"
+                              maxLength={150}
+                              defaultValue={yo?.nombre ?? user.nombre}
+                              className={inputClass}
+                            />
+                          </Field>
+                          <Field label="Género *">
+                            <select
+                              name="genero"
+                              required
+                              defaultValue={yo?.genero === "f" ? "f" : "m"}
+                              className={inputClass}
+                            >
+                              <option value="m">Hombre (Bienvenido)</option>
+                              <option value="f">Mujer (Bienvenida)</option>
+                            </select>
+                          </Field>
+                          <div className="sm:col-span-2">
+                            <SubmitButton pendingLabel="Guardando…">
+                              Guardar perfil
+                            </SubmitButton>
+                          </div>
+                        </GuardedForm>
                         <GuardedForm
                           action={resetAdminUsuarioPassword}
                           className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
@@ -221,6 +259,12 @@ export default async function ConfiguracionPage({
                 placeholder="Nombre visible"
                 className={inputClass}
               />
+            </Field>
+            <Field label="Género *">
+              <select name="genero" required defaultValue="m" className={inputClass}>
+                <option value="m">Hombre</option>
+                <option value="f">Mujer</option>
+              </select>
             </Field>
             <Field label="Contraseña *">
               <input

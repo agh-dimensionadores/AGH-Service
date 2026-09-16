@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { hashPassword, requireAdmin, requireCliente } from "@/lib/auth";
+import { parseGenero } from "@/lib/saludo";
 import {
   buildCubiscanOrdenHtml,
   copyPlanillaSurveyFields,
@@ -39,7 +40,15 @@ import {
   stripCalibracionFromPayload,
 } from "@/lib/calibracion-peso";
 import { buildNumeroSerie, TIPOS_AGENDA_SIN_CLIENTE } from "@/lib/utils";
-import { marcaUsaStock } from "@/lib/marcas";
+import {
+  marcaEsAgh,
+  marcaEsImportacion,
+  marcaUsaStock,
+} from "@/lib/marcas";
+import {
+  MSG_SERIE_DUPLICADA,
+  numeroSerieYaExiste,
+} from "@/lib/numero-serie";
 import {
   checkSectionsFor,
   planillaFirmaLabel,
@@ -199,6 +208,7 @@ export async function createAghUsuario(clienteId: number, formData: FormData) {
   const email = str(formData, "email").toLowerCase();
   const password = str(formData, "password");
   const nombre = str(formData, "nombre") || "Cliente";
+  const genero = parseGenero(str(formData, "genero"));
 
   if (!email || !email.includes("@")) {
     throw new Error("Ingresá un email válido");
@@ -233,6 +243,7 @@ export async function createAghUsuario(clienteId: number, formData: FormData) {
     data: {
       email,
       nombre,
+      genero,
       rol: "cliente",
       clienteId,
       passwordHash: await hashPassword(password),
@@ -274,6 +285,7 @@ export async function createAdminUsuario(formData: FormData) {
   const email = str(formData, "email").toLowerCase();
   const password = str(formData, "password");
   const nombre = str(formData, "nombre") || "Administrador";
+  const genero = parseGenero(str(formData, "genero"));
 
   if (!email || !email.includes("@")) {
     throw new Error("Ingresá un email válido");
@@ -294,6 +306,7 @@ export async function createAdminUsuario(formData: FormData) {
     data: {
       email,
       nombre,
+      genero,
       rol: "admin",
       clienteId: null,
       passwordHash: await hashPassword(password),
@@ -318,6 +331,21 @@ export async function resetAdminUsuarioPassword(formData: FormData) {
 
   touch("/configuracion");
   redirect("/configuracion?admin=password");
+}
+
+/** Actualiza nombre/género del admin logueado (para Bienvenido/Bienvenida). */
+export async function updateMiPerfil(formData: FormData) {
+  const session = await requireAdmin();
+  const nombre = str(formData, "nombre") || session.nombre;
+  const genero = parseGenero(str(formData, "genero"));
+
+  await prismaPg.usuario.update({
+    where: { id: session.id },
+    data: { nombre, genero },
+  });
+
+  touch("/", "/configuracion");
+  redirect("/configuracion?admin=perfil");
 }
 
 /** Modelos del catálogo que aparecen de base en /maquinas. */
@@ -480,14 +508,20 @@ export async function asignarMaquina(
   if (!catalogo) return { error: "Modelo de catálogo no encontrado" };
 
   const usaStock = marcaUsaStock(catalogo.marca);
+  const esAgh = marcaEsAgh(catalogo.marca);
   const stockId = optionalInt(formData, "stockId");
 
-  let stockItem: { id: number; numeroSerie: string | null } | null = null;
+  let stockItem: {
+    id: number;
+    numeroSerie: string;
+    fechaFabricacion: Date | null;
+  } | null = null;
   if (usaStock) {
     if (stockId == null) {
       return {
-        error:
-          "Para Cubiscan / Conlida / Cubetape tenés que elegir una unidad de stock. Si no hay, cargala en Stock primero.",
+        error: esAgh
+          ? "Para AGH tenés que elegir una unidad de stock. Si no hay, cargala en Stock primero."
+          : "Para Cubiscan / Conlida / Cubetape tenés que elegir una unidad de stock. Si no hay, cargala en Stock primero.",
       };
     }
     const stock = await prismaPg.maquinaStock.findFirst({
@@ -496,7 +530,7 @@ export async function asignarMaquina(
         idMaquina,
         estado: "disponible",
       },
-      select: { id: true, numeroSerie: true },
+      select: { id: true, numeroSerie: true, fechaFabricacion: true },
     });
     if (!stock) {
       return {
@@ -519,10 +553,18 @@ export async function asignarMaquina(
     };
   }
 
-  // AGH: venta/alquiler como hasta ahora. Stock: por defecto venta (modalidad opcional).
+  if (
+    await numeroSerieYaExiste(numeroSerie, {
+      excludeStockId: stockItem?.id,
+    })
+  ) {
+    return { error: MSG_SERIE_DUPLICADA };
+  }
+
+  // AGH: venta/alquiler. Importación: venta.
   const modalidadRaw = str(formData, "modalidad") || "venta";
   const modalidad =
-    !usaStock && modalidadRaw === "alquiler" ? "alquiler" : "venta";
+    esAgh && modalidadRaw === "alquiler" ? "alquiler" : "venta";
 
   let fechaInicioAlquiler: Date | null = null;
   let fechaFinAlquiler: Date | null = null;
@@ -542,53 +584,70 @@ export async function asignarMaquina(
     }
   }
 
-  const unidad = await prismaPg.$transaction(async (tx) => {
-    const created = await tx.clienteMaquina.create({
-      data: {
-        idCliente,
-        idMaquina,
-        numeroSerie,
-        sitio: optionalStr(formData, "ubicacion"),
-        anydesk: optionalStr(formData, "anydesk"),
-        serieCompu: optionalStr(formData, "serieCompu"),
-        serieCamara: optionalStr(formData, "serieCamara"),
-        serieEcoflow: optionalStr(formData, "serieEcoflow"),
-        seriePistola: optionalStr(formData, "seriePistola"),
-        modalidad,
-        fechaCompra:
-          modalidad === "venta" ? optionalDate(formData, "fechaCompra") : null,
-        fechaFabricacion: optionalDate(formData, "fechaFabricacion"),
-      },
-    });
+  const fechaFabricacion =
+    optionalDate(formData, "fechaFabricacion") ??
+    stockItem?.fechaFabricacion ??
+    null;
 
-    if (stockItem) {
-      await tx.maquinaStock.update({
-        where: { id: stockItem.id },
+  let unidad;
+  try {
+    unidad = await prismaPg.$transaction(async (tx) => {
+      const created = await tx.clienteMaquina.create({
         data: {
-          estado: "asignado",
-          idClienteMaquina: created.id,
-        },
-      });
-    }
-
-    if (
-      modalidad === "alquiler" &&
-      fechaInicioAlquiler &&
-      fechaFinAlquiler
-    ) {
-      await tx.maquinaAlquiler.create({
-        data: {
-          idClienteMaquina: created.id,
           idCliente,
-          fechaInicio: fechaInicioAlquiler,
-          fechaFin: fechaFinAlquiler,
-          comentario: comentarioAlquiler,
+          idMaquina,
+          numeroSerie,
+          sitio: optionalStr(formData, "ubicacion"),
+          direccion: optionalStr(formData, "direccionMaquina"),
+          anydesk: optionalStr(formData, "anydesk"),
+          serieCompu: optionalStr(formData, "serieCompu"),
+          serieCamara: optionalStr(formData, "serieCamara"),
+          serieEcoflow: optionalStr(formData, "serieEcoflow"),
+          seriePistola: optionalStr(formData, "seriePistola"),
+          modalidad,
+          fechaCompra:
+            modalidad === "venta"
+              ? optionalDate(formData, "fechaCompra")
+              : null,
+          fechaFabricacion,
         },
       });
-    }
 
-    return created;
-  });
+      if (stockItem) {
+        await tx.maquinaStock.update({
+          where: { id: stockItem.id },
+          data: {
+            estado: "asignado",
+            idClienteMaquina: created.id,
+          },
+        });
+      }
+
+      if (
+        modalidad === "alquiler" &&
+        fechaInicioAlquiler &&
+        fechaFinAlquiler
+      ) {
+        await tx.maquinaAlquiler.create({
+          data: {
+            idClienteMaquina: created.id,
+            idCliente,
+            fechaInicio: fechaInicioAlquiler,
+            fechaFin: fechaFinAlquiler,
+            comentario: comentarioAlquiler,
+          },
+        });
+      }
+
+      return created;
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (/unique|duplicate|numero_serie/i.test(msg)) {
+      return { error: MSG_SERIE_DUPLICADA };
+    }
+    throw e;
+  }
 
   await saveUnidadFotos(unidad.id, formData);
 
@@ -601,92 +660,102 @@ export async function asignarMaquina(
   redirect(`/maquinas/${unidad.id}`);
 }
 
-export async function crearStockMaquina(formData: FormData) {
+export async function crearStockMaquina(
+  formData: FormData
+): Promise<{ error: string } | void> {
   const idMaquina = requiredInt(formData, "catalogoId");
   const catalogo = await prismaPg.maquina.findUnique({
     where: { idmachine: idMaquina },
     select: { marca: true, modelo: true },
   });
-  if (!catalogo) throw new Error("Modelo de catálogo no encontrado");
+  if (!catalogo) return { error: "Modelo de catálogo no encontrado" };
   if (!marcaUsaStock(catalogo.marca)) {
-    throw new Error(
-      "El stock solo aplica a Cubiscan, Conlida y Cubetape. AGH se asigna directo."
-    );
+    return { error: "Ese modelo no usa stock" };
   }
 
-  const fechaImportacion = optionalDate(formData, "fechaImportacion");
-  if (!fechaImportacion) throw new Error("La fecha de importación es obligatoria");
+  const esAgh = marcaEsAgh(catalogo.marca);
+  const esImportacion = marcaEsImportacion(catalogo.marca);
 
-  const despachoImportacion = str(formData, "despachoImportacion");
-  if (!despachoImportacion) throw new Error("El despacho de importación es obligatorio");
+  let fechaImportacion: Date | null = null;
+  let despachoImportacion: string | null = null;
+  let po: string | null = null;
+  let origen: string | null = null;
+  let valorFo: Prisma.Decimal | null = null;
+  let fechaFabricacion: Date | null = null;
+  let precio: Prisma.Decimal | null = null;
 
-  const po = str(formData, "po");
-  if (!po) throw new Error("El PO es obligatorio");
-
-  const origen = str(formData, "origen");
-  if (!origen) throw new Error("El origen es obligatorio");
-
-  const valorFoRaw = str(formData, "valorFo").replace(",", ".");
-  if (!valorFoRaw || Number.isNaN(Number(valorFoRaw))) {
-    throw new Error("Indicá un Valor FO numérico válido");
-  }
-  const valorFo = new Prisma.Decimal(valorFoRaw);
-
-  const seriesRaw =
-    str(formData, "numerosSerie") || str(formData, "numeroSerie");
-  const series = [
-    ...new Set(
-      seriesRaw
-        .split(/[\n,;]+/)
-        .map((s) => {
-          try {
-            return buildNumeroSerie(catalogo.modelo, s);
-          } catch {
-            return "";
-          }
-        })
-        .filter(Boolean)
-    ),
-  ];
-  if (series.length === 0) {
-    throw new Error("Indicá al menos un nro. de serie");
-  }
-  if (series.length > 50) {
-    throw new Error("Máximo 50 series por carga");
-  }
-
-  const [enStock, asignadas] = await Promise.all([
-    prismaPg.maquinaStock.findMany({
-      where: { numeroSerie: { in: series } },
-      select: { numeroSerie: true },
-    }),
-    prismaPg.clienteMaquina.findMany({
-      where: { numeroSerie: { in: series } },
-      select: { numeroSerie: true },
-    }),
-  ]);
-  const usados = new Set(
-    [...enStock, ...asignadas]
-      .map((r) => r.numeroSerie)
-      .filter((s): s is string => Boolean(s))
-  );
-  const conflicto = series.find((s) => usados.has(s));
-  if (conflicto) {
-    throw new Error(`El nro. de serie ${conflicto} ya existe`);
+  if (esAgh) {
+    fechaFabricacion = optionalDate(formData, "fechaFabricacion");
+    if (!fechaFabricacion) {
+      return { error: "La fecha de fabricación es obligatoria para AGH" };
+    }
+    const precioRaw = str(formData, "precio").replace(",", ".");
+    if (precioRaw) {
+      if (Number.isNaN(Number(precioRaw))) {
+        return { error: "Indicá un precio numérico válido" };
+      }
+      precio = new Prisma.Decimal(precioRaw);
+    }
+  } else if (esImportacion) {
+    fechaImportacion = optionalDate(formData, "fechaImportacion");
+    if (!fechaImportacion) {
+      return { error: "La fecha de importación es obligatoria" };
+    }
+    despachoImportacion = str(formData, "despachoImportacion");
+    if (!despachoImportacion) {
+      return { error: "El despacho de importación es obligatorio" };
+    }
+    po = str(formData, "po");
+    if (!po) return { error: "El PO es obligatorio" };
+    origen = str(formData, "origen");
+    if (!origen) return { error: "El origen es obligatorio" };
+    const valorFoRaw = str(formData, "valorFo").replace(",", ".");
+    if (!valorFoRaw || Number.isNaN(Number(valorFoRaw))) {
+      return { error: "Indicá un Valor FO numérico válido" };
+    }
+    valorFo = new Prisma.Decimal(valorFoRaw);
+  } else {
+    return { error: "Ese modelo no usa stock" };
   }
 
-  await prismaPg.maquinaStock.createMany({
-    data: series.map((numeroSerie) => ({
-      idMaquina,
-      numeroSerie,
-      fechaImportacion,
-      despachoImportacion,
-      po,
-      origen,
-      valorFo,
-      estado: "disponible",
-    })),
-  });
+  const serieRaw =
+    str(formData, "numeroSerie") || str(formData, "numerosSerie");
+  let numeroSerie: string;
+  try {
+    numeroSerie = buildNumeroSerie(catalogo.modelo, serieRaw);
+  } catch (e) {
+    return {
+      error:
+        e instanceof Error ? e.message : "El nro. de serie es obligatorio",
+    };
+  }
+
+  if (await numeroSerieYaExiste(numeroSerie)) {
+    return { error: MSG_SERIE_DUPLICADA };
+  }
+
+  try {
+    await prismaPg.maquinaStock.create({
+      data: {
+        idMaquina,
+        numeroSerie,
+        fechaImportacion,
+        despachoImportacion,
+        po,
+        origen,
+        valorFo,
+        fechaFabricacion,
+        precio,
+        estado: "disponible",
+      },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (/unique|duplicate|numero_serie/i.test(msg)) {
+      return { error: MSG_SERIE_DUPLICADA };
+    }
+    throw e;
+  }
 
   touch("/maquinas/stock", "/maquinas");
   redirect("/maquinas/stock");
@@ -706,12 +775,21 @@ export async function deleteStockMaquina(id: number) {
   redirect("/maquinas/stock");
 }
 
-export async function updateMaquina(id: number, formData: FormData) {
+export async function updateMaquina(
+  id: number,
+  formData: FormData
+): Promise<{ error: string } | void> {
   const existing = await prismaPg.clienteMaquina.findUnique({
     where: { id },
-    select: { id: true, modalidad: true },
+    select: { id: true, modalidad: true, liberadaEn: true },
   });
-  if (!existing) throw new Error("Equipo no encontrado");
+  if (!existing) return { error: "Equipo no encontrado" };
+  if (existing.liberadaEn) {
+    return {
+      error:
+        "Esta unidad ya fue liberada (historial). Asigná de nuevo desde stock.",
+    };
+  }
 
   const idCliente = requiredInt(formData, "clienteId");
   const idMaquina = requiredInt(formData, "catalogoId");
@@ -722,30 +800,70 @@ export async function updateMaquina(id: number, formData: FormData) {
     where: { idmachine: idMaquina },
     select: { modelo: true },
   });
-  if (!catalogo) throw new Error("Modelo de catálogo no encontrado");
-  const numeroSerie = buildNumeroSerie(catalogo.modelo, digitos);
+  if (!catalogo) return { error: "Modelo de catálogo no encontrado" };
 
-  await prismaPg.clienteMaquina.update({
-    where: { id },
-    data: {
-      idCliente,
-      idMaquina,
-      numeroSerie,
-      sitio: optionalStr(formData, "ubicacion"),
-      anydesk: optionalStr(formData, "anydesk"),
-      serieCompu: optionalStr(formData, "serieCompu"),
-      serieCamara: optionalStr(formData, "serieCamara"),
-      serieEcoflow: optionalStr(formData, "serieEcoflow"),
-      seriePistola: optionalStr(formData, "seriePistola"),
-      // modalidad no se cambia acá
-      modalidad: existing.modalidad,
-      fechaCompra:
-        existing.modalidad === "venta"
-          ? optionalDate(formData, "fechaCompra")
-          : null,
-      fechaFabricacion: optionalDate(formData, "fechaFabricacion"),
-    },
+  let numeroSerie: string;
+  try {
+    numeroSerie = buildNumeroSerie(catalogo.modelo, digitos);
+  } catch (e) {
+    return {
+      error:
+        e instanceof Error ? e.message : "El nro. de serie es obligatorio",
+    };
+  }
+
+  const stockVinculado = await prismaPg.maquinaStock.findFirst({
+    where: { idClienteMaquina: id },
+    select: { id: true },
   });
+
+  if (
+    await numeroSerieYaExiste(numeroSerie, {
+      excludeUnidadId: id,
+      excludeStockId: stockVinculado?.id,
+    })
+  ) {
+    return { error: MSG_SERIE_DUPLICADA };
+  }
+
+  try {
+    await prismaPg.clienteMaquina.update({
+      where: { id },
+      data: {
+        idCliente,
+        idMaquina,
+        numeroSerie,
+        sitio: optionalStr(formData, "ubicacion"),
+        direccion: optionalStr(formData, "direccionMaquina"),
+        anydesk: optionalStr(formData, "anydesk"),
+        serieCompu: optionalStr(formData, "serieCompu"),
+        serieCamara: optionalStr(formData, "serieCamara"),
+        serieEcoflow: optionalStr(formData, "serieEcoflow"),
+        seriePistola: optionalStr(formData, "seriePistola"),
+        // modalidad no se cambia acá
+        modalidad: existing.modalidad,
+        fechaCompra:
+          existing.modalidad === "venta"
+            ? optionalDate(formData, "fechaCompra")
+            : null,
+        fechaFabricacion: optionalDate(formData, "fechaFabricacion"),
+      },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (/unique|duplicate|numero_serie/i.test(msg)) {
+      return { error: MSG_SERIE_DUPLICADA };
+    }
+    throw e;
+  }
+
+  // Mantener la serie alineada en el stock vinculado
+  if (stockVinculado) {
+    await prismaPg.maquinaStock.update({
+      where: { id: stockVinculado.id },
+      data: { numeroSerie },
+    });
+  }
 
   await saveUnidadFotos(id, formData);
 
@@ -757,8 +875,14 @@ export async function updateMaquina(id: number, formData: FormData) {
 export async function updateAlquilerFin(alquilerId: number, formData: FormData) {
   const alquiler = await prismaPg.maquinaAlquiler.findUnique({
     where: { id: alquilerId },
+    include: {
+      instalacion: { select: { liberadaEn: true } },
+    },
   });
   if (!alquiler) throw new Error("Alquiler no encontrado");
+  if (alquiler.instalacion.liberadaEn) {
+    return { error: "Esta unidad ya fue liberada" };
+  }
 
   const fechaFin = optionalDate(formData, "fechaFin");
   if (!fechaFin) throw new Error("La fecha de fin es obligatoria");
@@ -779,6 +903,91 @@ export async function updateAlquilerFin(alquilerId: number, formData: FormData) 
   redirect(`/maquinas/${alquiler.idClienteMaquina}?alquiler=ok`);
 }
 
+/**
+ * Termina el alquiler: conserva historial (unidad + períodos) y
+ * libera la serie al stock para asignarla a otro cliente.
+ */
+export async function liberarMaquinaAlquiler(
+  id: number
+): Promise<{ error: string } | void> {
+  const unidad = await prismaPg.clienteMaquina.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      idCliente: true,
+      idMaquina: true,
+      numeroSerie: true,
+      modalidad: true,
+      liberadaEn: true,
+      fechaFabricacion: true,
+      alquileres: {
+        orderBy: { fechaInicio: "desc" },
+        take: 1,
+        select: { id: true, fechaFin: true },
+      },
+    },
+  });
+  if (!unidad) return { error: "Equipo no encontrado" };
+  if (unidad.modalidad !== "alquiler") {
+    return { error: "Solo se pueden liberar equipos en modalidad alquiler" };
+  }
+  if (unidad.liberadaEn) {
+    return { error: "Esta unidad ya fue liberada" };
+  }
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const alquilerActual = unidad.alquileres[0] ?? null;
+
+  await prismaPg.$transaction(async (tx) => {
+    if (alquilerActual && alquilerActual.fechaFin > hoy) {
+      await tx.maquinaAlquiler.update({
+        where: { id: alquilerActual.id },
+        data: { fechaFin: hoy },
+      });
+    }
+
+    await tx.clienteMaquina.update({
+      where: { id },
+      data: { liberadaEn: new Date() },
+    });
+
+    const stock = await tx.maquinaStock.findFirst({
+      where: {
+        OR: [{ idClienteMaquina: id }, { numeroSerie: unidad.numeroSerie }],
+      },
+      select: { id: true },
+    });
+
+    if (stock) {
+      await tx.maquinaStock.update({
+        where: { id: stock.id },
+        data: {
+          estado: "disponible",
+          idClienteMaquina: null,
+        },
+      });
+    } else {
+      await tx.maquinaStock.create({
+        data: {
+          idMaquina: unidad.idMaquina,
+          numeroSerie: unidad.numeroSerie,
+          fechaFabricacion: unidad.fechaFabricacion,
+          estado: "disponible",
+        },
+      });
+    }
+  });
+
+  touch(
+    "/maquinas",
+    "/maquinas/stock",
+    `/clientes/${unidad.idCliente}`,
+    `/maquinas/${id}`
+  );
+  redirect(`/maquinas/${id}?alquiler=liberada`);
+}
+
 /** Nuevo período de alquiler sobre la misma unidad. */
 export async function crearPeriodoAlquiler(
   idClienteMaquina: number,
@@ -786,9 +995,12 @@ export async function crearPeriodoAlquiler(
 ) {
   const unidad = await prismaPg.clienteMaquina.findUnique({
     where: { id: idClienteMaquina },
-    select: { id: true, idCliente: true, modalidad: true },
+    select: { id: true, idCliente: true, modalidad: true, liberadaEn: true },
   });
   if (!unidad) throw new Error("Equipo no encontrado");
+  if (unidad.liberadaEn) {
+    throw new Error("Esta unidad ya fue liberada; asignala de nuevo desde stock");
+  }
   if (unidad.modalidad !== "alquiler") {
     throw new Error("Este equipo no está en modalidad alquiler");
   }

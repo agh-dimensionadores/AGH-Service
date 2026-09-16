@@ -26,7 +26,7 @@ export default async function PortalHomePage() {
   const [cliente, unidades] = await Promise.all([
     getCliente(clienteId),
     prismaPg.clienteMaquina.findMany({
-      where: { idCliente: clienteId },
+      where: { idCliente: clienteId, liberadaEn: null },
       orderBy: { fechaCreacion: "desc" },
       include: {
         maquina: {

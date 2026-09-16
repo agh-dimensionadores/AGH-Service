@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   deleteMaquina,
+  liberarMaquinaAlquiler,
   updateAlquilerFin,
   updateMaquina,
 } from "@/app/actions";
@@ -13,6 +14,7 @@ import { prismaPg } from "@/lib/prisma";
 import {
   listClientes,
   getCliente,
+  getClientesMap,
   clienteLabel,
 } from "@/lib/clientes";
 import { MachineThumb } from "@/components/machine-thumb";
@@ -91,29 +93,49 @@ export default async function MaquinaDetallePage({
   const cliente = await getCliente(unidad.idCliente);
   const update = updateMaquina.bind(null, unidad.id);
   const remove = deleteMaquina.bind(null, unidad.id);
+  const liberar = liberarMaquinaAlquiler.bind(null, unidad.id);
   const esAlquiler = unidad.modalidad === "alquiler";
-  const alquilerActivo = unidad.alquileres[0] ?? null;
+  const liberada = Boolean(unidad.liberadaEn);
+  const alquilerActivo = !liberada ? unidad.alquileres[0] ?? null : null;
+  const clientesAlquilerMap = await getClientesMap(
+    unidad.alquileres.map((a) => a.idCliente)
+  );
 
   return (
     <div>
       <PageHeader
         title={machineName(unidad)}
-        description={`Nro. serie ${unidad.numeroSerie} · Cliente: ${clienteLabel(cliente)} · ${esAlquiler ? "Alquiler" : "Venta"}`}
+        description={`Nro. serie ${unidad.numeroSerie} · Cliente: ${clienteLabel(cliente)} · ${esAlquiler ? "Alquiler" : "Venta"}${liberada ? " · Liberada" : ""}`}
         action={
           <div className="flex flex-wrap gap-2">
             <SecondaryLink href="/maquinas">Volver</SecondaryLink>
-            <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${unidad.id}`}>
-              Nuevo trabajo
-            </PrimaryLink>
+            {!liberada ? (
+              <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${unidad.id}`}>
+                Nuevo trabajo
+              </PrimaryLink>
+            ) : (
+              <PrimaryLink href="/maquinas/stock">Ver stock</PrimaryLink>
+            )}
           </div>
         }
       />
 
-      {alquilerMsg === "ok" || alquilerMsg === "nuevo" ? (
+      {alquilerMsg === "ok" ||
+      alquilerMsg === "nuevo" ||
+      alquilerMsg === "liberada" ? (
         <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
           {alquilerMsg === "nuevo"
             ? "Período de alquiler registrado."
-            : "Alquiler actualizado."}
+            : alquilerMsg === "liberada"
+              ? "Unidad liberada. El historial se conserva y la serie volvió a stock para reasignar."
+              : "Alquiler actualizado."}
+        </p>
+      ) : null}
+
+      {liberada ? (
+        <p className="mb-4 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
+          Liberada el {formatDate(unidad.liberadaEn)}. Esta ficha es historial;
+          la máquina está disponible en stock para otro cliente.
         </p>
       ) : null}
 
@@ -166,6 +188,15 @@ export default async function MaquinaDetallePage({
                   name="ubicacion"
                   defaultValue={unidad.sitio ?? ""}
                   className={inputClass}
+                />
+              </Field>
+              <Field label="Dirección de máquina">
+                <input
+                  name="direccionMaquina"
+                  maxLength={300}
+                  defaultValue={unidad.direccion ?? ""}
+                  className={inputClass}
+                  placeholder="Calle, número, localidad…"
                 />
               </Field>
               <Field label="AnyDesk (opcional)">
@@ -244,10 +275,20 @@ export default async function MaquinaDetallePage({
                 unidadId={unidad.id}
                 existing={unidad.fotos}
               />
-              <div className="flex flex-wrap gap-2">
-                <SubmitButton>Guardar cambios</SubmitButton>
-                <DangerButton formAction={remove}>Eliminar equipo</DangerButton>
-              </div>
+                <div className="flex flex-wrap gap-2">
+                  {!liberada ? (
+                    <>
+                      <SubmitButton>Guardar cambios</SubmitButton>
+                      <DangerButton formAction={remove}>
+                        Eliminar equipo
+                      </DangerButton>
+                    </>
+                  ) : (
+                    <p className="text-sm text-[var(--ink-muted)]">
+                      Solo lectura: unidad liberada (historial).
+                    </p>
+                  )}
+                </div>
             </GuardedForm>
             <p className="mt-4 text-sm text-[var(--ink-muted)]">
               Cliente:{" "}
@@ -270,14 +311,15 @@ export default async function MaquinaDetallePage({
         </div>
 
         <div className="space-y-4">
-          {esAlquiler && alquilerActivo ? (
+          {esAlquiler && alquilerActivo && !liberada ? (
             <Panel>
               <h3 className="brand-font mb-1 text-lg font-semibold text-white">
                 Alquiler actual
               </h3>
               <p className="mb-4 text-sm text-[var(--ink-muted)]">
                 La fecha de inicio no se puede cambiar. Solo el fin y el
-                comentario.
+                comentario. Al liberar, la serie vuelve a stock y se conserva
+                este historial.
               </p>
               <GuardedForm
                 action={updateAlquilerFin.bind(null, alquilerActivo.id)}
@@ -307,10 +349,45 @@ export default async function MaquinaDetallePage({
                     />
                   </Field>
                 </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-2 flex flex-wrap gap-2">
                   <SubmitButton>Actualizar fin / comentario</SubmitButton>
                 </div>
               </GuardedForm>
+              <form action={liberar} className="mt-4 border-t border-[var(--line)] pt-4">
+                <DangerButton formAction={liberar} pendingLabel="Liberando…">
+                  Liberar y devolver a stock
+                </DangerButton>
+                <p className="mt-2 text-xs text-[var(--ink-muted)]">
+                  No borra el historial de alquiler. La máquina queda disponible
+                  para asignar a otro cliente.
+                </p>
+              </form>
+            </Panel>
+          ) : null}
+
+          {esAlquiler && unidad.alquileres.length > 0 ? (
+            <Panel>
+              <h3 className="brand-font mb-4 text-lg font-semibold text-white">
+                Historial de alquileres
+              </h3>
+              <ul className="space-y-3">
+                {unidad.alquileres.map((a) => (
+                  <li
+                    key={a.id}
+                    className="rounded-lg border border-[var(--line)] px-3 py-2 text-sm"
+                  >
+                    <p className="font-medium text-white">
+                      {clienteLabel(clientesAlquilerMap.get(a.idCliente))}
+                    </p>
+                    <p className="text-[var(--ink-muted)]">
+                      {formatDate(a.fechaInicio)} → {formatDate(a.fechaFin)}
+                    </p>
+                    {a.comentario ? (
+                      <p className="mt-1 text-[var(--ink-muted)]">{a.comentario}</p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             </Panel>
           ) : null}
 
@@ -319,9 +396,11 @@ export default async function MaquinaDetallePage({
               <h3 className="brand-font text-lg font-semibold text-white">
                 Expediente técnico
               </h3>
-              <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${unidad.id}`}>
-                Agregar
-              </PrimaryLink>
+              {!liberada ? (
+                <PrimaryLink href={`/mantenimientos/nuevo?maquinaId=${unidad.id}`}>
+                  Agregar
+                </PrimaryLink>
+              ) : null}
             </div>
 
             {unidad.mantenimientos.length === 0 ? (

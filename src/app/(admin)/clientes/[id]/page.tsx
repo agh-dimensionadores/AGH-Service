@@ -47,7 +47,7 @@ export default async function ClienteDetallePage({
 
   const [unidades, cloudUsers, aghUsuario] = await Promise.all([
     prismaPg.clienteMaquina.findMany({
-      where: { idCliente: id },
+      where: { idCliente: id, liberadaEn: null },
       orderBy: { fechaCreacion: "desc" },
       include: {
         maquina: true,
@@ -318,6 +318,12 @@ export default async function ClienteDetallePage({
                     defaultValue={cliente.nombre}
                     className={inputClass}
                   />
+                </Field>
+                <Field label="Género">
+                  <select name="genero" defaultValue="m" className={inputClass}>
+                    <option value="m">Hombre</option>
+                    <option value="f">Mujer</option>
+                  </select>
                 </Field>
                 <Field label="Contraseña *">
                   <input

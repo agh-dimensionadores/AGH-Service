@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prismaPg } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getClientesMap, clienteLabel } from "@/lib/clientes";
+import { saludoBienvenida } from "@/lib/saludo";
 import { DonutChart } from "@/components/donut";
 import { MachineThumb } from "@/components/machine-thumb";
 import {
@@ -37,11 +38,22 @@ const maquinaSelect = {
 
 export default async function DashboardPage() {
   const session = await getSession();
-  const nombre = session?.nombre?.split(" ")[0] || "Micaela";
+  const perfil = session
+    ? await prismaPg.usuario.findUnique({
+        where: { id: session.id },
+        select: { nombre: true, genero: true },
+      })
+    : null;
+  const nombre =
+    perfil?.nombre?.split(" ")[0] ||
+    session?.nombre?.split(" ")[0] ||
+    "Admin";
+  const saludo = saludoBienvenida(nombre, perfil?.genero ?? session?.genero);
 
   const [unidades, pendientes, abiertos, proximos, recientes, actividad] =
     await Promise.all([
       prismaPg.clienteMaquina.findMany({
+        where: { liberadaEn: null },
         include: {
           maquina: { select: maquinaSelect },
           mantenimientos: { select: { estado: true } },
@@ -62,6 +74,7 @@ export default async function DashboardPage() {
         },
       }),
       prismaPg.clienteMaquina.findMany({
+        where: { liberadaEn: null },
         take: 4,
         orderBy: { fechaCreacion: "desc" },
         include: {
@@ -149,7 +162,7 @@ export default async function DashboardPage() {
   return (
     <div>
       <TopBar
-        title={`Bienvenida, ${nombre}`}
+        title={saludo}
         notifications={notifications}
       />
 

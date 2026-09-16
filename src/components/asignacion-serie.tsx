@@ -6,7 +6,7 @@ import { AsignacionModalidadFields } from "@/components/asignacion-modalidad";
 import { IconSearch } from "@/components/icons";
 import { Field, inputClass } from "@/components/ui";
 import { MachineThumb } from "@/components/machine-thumb";
-import { marcaUsaStock } from "@/lib/marcas";
+import { marcaEsAgh, marcaUsaStock } from "@/lib/marcas";
 import { seriePrefixFromModelo } from "@/lib/utils";
 
 export type CatalogoOption = {
@@ -20,12 +20,14 @@ export type CatalogoOption = {
 export type StockOption = {
   id: number;
   idMaquina: number;
-  numeroSerie: string | null;
-  fechaImportacion: string;
-  despachoImportacion: string;
-  po: string;
-  origen: string;
-  valorFo: string;
+  numeroSerie: string;
+  fechaImportacion: string | null;
+  despachoImportacion: string | null;
+  po: string | null;
+  origen: string | null;
+  valorFo: string | null;
+  fechaFabricacion: string | null;
+  precio: string | null;
 };
 
 function digitsFromSerie(modelo: string | null | undefined, serie: string) {
@@ -204,7 +206,11 @@ export function AsignacionCatalogoYSerie({
                       ) : null}
                     </span>
                     <span className="text-xs text-[var(--ink-muted)]">
-                      PO {s.po} · {s.origen} · {s.fechaImportacion}
+                      {s.fechaFabricacion
+                        ? `Fab. ${s.fechaFabricacion}${s.precio ? ` · $${s.precio}` : ""}`
+                        : s.po
+                          ? `PO ${s.po} · ${s.origen ?? ""} · ${s.fechaImportacion ?? ""}`
+                          : "Stock"}
                     </span>
                   </button>
                 );
@@ -303,10 +309,13 @@ export function AsignacionCatalogoYSerie({
                 </option>
                 {stockDelModelo.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.numeroSerie
-                      ? `Serie ${s.numeroSerie}`
-                      : `Sin serie #${s.id}`}
-                    {" · "}PO {s.po} · {s.origen} · {s.fechaImportacion}
+                    Serie {s.numeroSerie}
+                    {s.fechaFabricacion
+                      ? ` · fab. ${s.fechaFabricacion}`
+                      : s.po
+                        ? ` · PO ${s.po} · ${s.origen ?? ""}`
+                        : ""}
+                    {s.precio ? ` · $${s.precio}` : ""}
                   </option>
                 ))}
               </select>
@@ -378,7 +387,11 @@ export function AsignacionCatalogoYSerie({
       </div>
 
       {usaStock ? (
-        <input type="hidden" name="modalidad" value="venta" />
+        marcaEsAgh(selected?.marca) ? (
+          <AsignacionModalidadFields />
+        ) : (
+          <input type="hidden" name="modalidad" value="venta" />
+        )
       ) : (
         <AsignacionModalidadFields />
       )}

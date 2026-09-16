@@ -24,7 +24,7 @@ export default async function PortalSolicitarPage({
   const { maquinaId } = await searchParams;
 
   const unidades = await prismaPg.clienteMaquina.findMany({
-    where: { idCliente: session.clienteId! },
+    where: { idCliente: session.clienteId!, liberadaEn: null },
     orderBy: { fechaCreacion: "desc" },
     include: {
       maquina: { select: { marca: true, modelo: true } },

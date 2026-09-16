@@ -41,6 +41,10 @@ async function ensureTables() {
     CREATE INDEX IF NOT EXISTS agh_usuarios_cliente_id_idx
     ON agh_usuarios (cliente_id)
   `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE agh_usuarios
+      ADD COLUMN IF NOT EXISTS genero VARCHAR(1)
+  `);
   await db.$executeRawUnsafe(`DROP TABLE IF EXISTS agh_soporte`);
   await db.$executeRawUnsafe(`
     ALTER TABLE clientes_maquinas
@@ -56,6 +60,30 @@ async function ensureTables() {
       ADD COLUMN IF NOT EXISTS serie_camara VARCHAR(100),
       ADD COLUMN IF NOT EXISTS serie_ecoflow VARCHAR(100),
       ADD COLUMN IF NOT EXISTS serie_pistola VARCHAR(100)
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_maquinas
+      ADD COLUMN IF NOT EXISTS direccion VARCHAR(300)
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_maquinas
+      ADD COLUMN IF NOT EXISTS liberada_en TIMESTAMPTZ
+  `);
+  // Serie única solo en asignaciones activas (liberadas conservan historial)
+  await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_maquinas
+      DROP CONSTRAINT IF EXISTS clientes_maquinas_numero_serie_key
+  `);
+  await db.$executeRawUnsafe(`
+    DROP INDEX IF EXISTS clientes_maquinas_numero_serie_key
+  `);
+  await db.$executeRawUnsafe(`
+    DROP INDEX IF EXISTS clientes_maquinas_numero_serie_activa_key
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX clientes_maquinas_numero_serie_activa_key
+      ON clientes_maquinas (numero_serie)
+      WHERE liberada_en IS NULL
   `);
   await db.$executeRawUnsafe(`
     ALTER TABLE clientes
@@ -155,12 +183,14 @@ async function ensureTables() {
     CREATE TABLE IF NOT EXISTS maquinas_stock (
       id SERIAL PRIMARY KEY,
       id_maquina INTEGER NOT NULL REFERENCES maquinas(idmachine),
-      numero_serie VARCHAR(100) UNIQUE,
-      fecha_importacion DATE NOT NULL,
-      despacho_importacion VARCHAR(100) NOT NULL,
-      po VARCHAR(100) NOT NULL,
-      origen VARCHAR(150) NOT NULL,
-      valor_fo NUMERIC(14, 2) NOT NULL,
+      numero_serie VARCHAR(100) NOT NULL UNIQUE,
+      fecha_importacion DATE,
+      despacho_importacion VARCHAR(100),
+      po VARCHAR(100),
+      origen VARCHAR(150),
+      valor_fo NUMERIC(14, 2),
+      fecha_fabricacion DATE,
+      precio NUMERIC(14, 2),
       estado VARCHAR(20) NOT NULL DEFAULT 'disponible',
       id_cliente_maquina INTEGER UNIQUE
         REFERENCES clientes_maquinas(id) ON DELETE SET NULL,
@@ -172,9 +202,35 @@ async function ensureTables() {
       ADD COLUMN IF NOT EXISTS numero_serie VARCHAR(100)
   `);
   await db.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX IF NOT EXISTS maquinas_stock_numero_serie_key
+    ALTER TABLE maquinas_stock
+      ADD COLUMN IF NOT EXISTS fecha_fabricacion DATE,
+      ADD COLUMN IF NOT EXISTS precio NUMERIC(14, 2)
+  `);
+  // Limpiar vacíos y forzar unicidad (el nro. de serie identifica la unidad)
+  await db.$executeRawUnsafe(`
+    UPDATE maquinas_stock
+    SET numero_serie = 'STOCK-' || id::text
+    WHERE numero_serie IS NULL OR TRIM(numero_serie) = ''
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE maquinas_stock
+      ALTER COLUMN numero_serie SET NOT NULL
+  `);
+  // Import fields opcionales (AGH no los usa)
+  await db.$executeRawUnsafe(`
+    ALTER TABLE maquinas_stock
+      ALTER COLUMN fecha_importacion DROP NOT NULL,
+      ALTER COLUMN despacho_importacion DROP NOT NULL,
+      ALTER COLUMN po DROP NOT NULL,
+      ALTER COLUMN origen DROP NOT NULL,
+      ALTER COLUMN valor_fo DROP NOT NULL
+  `);
+  await db.$executeRawUnsafe(`
+    DROP INDEX IF EXISTS maquinas_stock_numero_serie_key
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX maquinas_stock_numero_serie_key
       ON maquinas_stock (numero_serie)
-      WHERE numero_serie IS NOT NULL
   `);
   await db.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS maquinas_stock_maquina_idx
@@ -198,6 +254,15 @@ async function seedIfNeeded() {
       passwordHash,
     },
   });
+
+  await db.$executeRawUnsafe(`
+    UPDATE agh_usuarios SET genero = 'f' WHERE email = 'micaela@agh.com'
+  `);
+  await db.$executeRawUnsafe(`
+    UPDATE agh_usuarios
+    SET genero = 'm'
+    WHERE genero IS NULL AND lower(nombre) LIKE '%ariel%'
+  `);
 
   const cliente = await db.cliente.findFirst({ orderBy: { id: "asc" } });
   if (!cliente) return;

@@ -46,6 +46,8 @@ export default async function AsignarMaquinaPage({
         po: true,
         origen: true,
         valorFo: true,
+        fechaFabricacion: true,
+        precio: true,
       },
     }),
   ]);
@@ -64,18 +66,24 @@ export default async function AsignarMaquinaPage({
     id: s.id,
     idMaquina: s.idMaquina,
     numeroSerie: s.numeroSerie,
-    fechaImportacion: s.fechaImportacion.toISOString().slice(0, 10),
+    fechaImportacion: s.fechaImportacion
+      ? s.fechaImportacion.toISOString().slice(0, 10)
+      : null,
     despachoImportacion: s.despachoImportacion,
     po: s.po,
     origen: s.origen,
-    valorFo: s.valorFo.toString(),
+    valorFo: s.valorFo?.toString() ?? null,
+    fechaFabricacion: s.fechaFabricacion
+      ? s.fechaFabricacion.toISOString().slice(0, 10)
+      : null,
+    precio: s.precio?.toString() ?? null,
   }));
 
   return (
     <div>
       <PageHeader
         title="Asignar máquina"
-        description="AGH: venta o alquiler. Cubiscan / Conlida / Cubetape: requieren stock disponible."
+        description="Todas las marcas salen de stock. AGH: venta o alquiler. Cubiscan / Conlida / Cubetape: venta."
         action={
           <div className="flex flex-wrap gap-2">
             <SecondaryLink href="/maquinas/stock">Stock</SecondaryLink>
@@ -138,6 +146,14 @@ export default async function AsignarMaquinaPage({
                 name="ubicacion"
                 className={inputClass}
                 placeholder="Muelle, packing, CEDIS..."
+              />
+            </Field>
+            <Field label="Dirección de máquina">
+              <input
+                name="direccionMaquina"
+                maxLength={300}
+                className={inputClass}
+                placeholder="Calle, número, localidad…"
               />
             </Field>
             <Field label="AnyDesk (opcional)">

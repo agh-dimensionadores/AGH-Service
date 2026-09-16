@@ -58,6 +58,7 @@ export default async function MaquinasPage({
       },
     }),
     prismaPg.clienteMaquina.findMany({
+      where: { liberadaEn: null },
       orderBy: { fechaCreacion: "desc" },
       include: {
         maquina: {
