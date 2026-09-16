@@ -47,7 +47,7 @@ export default async function EditarCatalogoMaquinaPage({
     <div>
       <PageHeader
         title={`Editar ${item.marca} ${item.modelo ?? ""}`.trim()}
-        description="Actualizá marca y modelo. CubiScan 100, 110, 150, 200 y 325 usan la foto cubiscan de ese número."
+        description="Actualizá marca, modelo e imagen. Si subís una foto, esa se usa (las de CubiScan/AGH por defecto solo aplican si no hay imagen propia)."
         action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
       />
 
@@ -63,7 +63,11 @@ export default async function EditarCatalogoMaquinaPage({
           className="mb-4 machine-thumb object-cover"
         />
 
-        <GuardedForm action={update} className="grid gap-4">
+        <GuardedForm
+          action={update}
+          encType="multipart/form-data"
+          className="grid gap-4"
+        >
           <Field label="Marca *">
             <input
               name="marca"

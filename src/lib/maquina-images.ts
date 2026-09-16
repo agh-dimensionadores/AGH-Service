@@ -67,12 +67,10 @@ export function staticMaquinaImageUrl(
   return file ? `/maquinas/${file}` : null;
 }
 
-/** Foto de catálogo: CubiScan por número de modelo; si no, imagen subida a PostgreSQL. */
+/** Foto de catálogo: imagen subida a PostgreSQL primero; si no, estáticas CubiScan/AGH. */
 export function maquinaImageSrc(m: MaquinaImageInput): string | null {
-  const staticUrl = staticMaquinaImageUrl(m.marca, m.modelo);
-  if (staticUrl) return staticUrl;
   if (m.imagenMime && m.idmachine != null) {
     return catalogImageUrl(m.idmachine, m.imagenUpdatedAt);
   }
-  return null;
+  return staticMaquinaImageUrl(m.marca, m.modelo);
 }

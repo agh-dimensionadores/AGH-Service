@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "16mb",
     },
+    // Con middleware, Next clona/trunca el body (default 10mb). Fotos de celular
+    // suelen superar eso y busboy responde "Unexpected end of form".
+    middlewareClientMaxBodySize: "32mb",
   },
   webpack: (config) => {
     config.resolve.alias = {

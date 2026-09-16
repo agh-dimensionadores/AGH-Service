@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { unstable_rethrow } from "next/navigation";
 
@@ -8,42 +8,60 @@ export type ActionResult = { error: string } | void | undefined;
 
 type ServerAction = (formData: FormData) => ActionResult | Promise<ActionResult>;
 
-/** Evita doble envío mientras el POST a PostgreSQL (remoto) está en curso. */
+function friendlyActionError(err: unknown): string {
+  const message =
+    err instanceof Error && err.message
+      ? err.message
+      : "No se pudo guardar. Revisá los datos e intentá de nuevo.";
+  if (/unexpected end of form/i.test(message)) {
+    return "No se pudo subir la imagen (archivo incompleto o demasiado grande). Probá JPG/PNG de hasta 5 MB e intentá de nuevo.";
+  }
+  if (
+    message.includes("NEXT_") ||
+    message === "An error occurred in the Server Components render."
+  ) {
+    return "No se pudo guardar. Revisá los datos e intentá de nuevo.";
+  }
+  return message;
+}
+
+/**
+ * Evita doble envío. Usa useActionState para que el multipart (fotos)
+ * se envíe como POST nativo y no se rompa al re-empaquetar FormData.
+ */
 export function GuardedForm({
   action,
   className,
   children,
+  encType,
 }: {
   action: ServerAction;
   className?: string;
   children: React.ReactNode;
+  /** Necesario con inputs type=file */
+  encType?: "multipart/form-data" | "application/x-www-form-urlencoded";
 }) {
-  const [error, setError] = useState<string | null>(null);
+  const [error, formAction] = useActionState(
+    async (_prev: string | null, formData: FormData) => {
+      try {
+        const result = await action(formData);
+        if (result && typeof result === "object" && result.error) {
+          return result.error;
+        }
+        return null;
+      } catch (err) {
+        unstable_rethrow(err);
+        return friendlyActionError(err);
+      }
+    },
+    null as string | null
+  );
 
   return (
     <form
       className={className}
-      action={async (formData) => {
-        setError(null);
-        try {
-          const result = await action(formData);
-          if (result && typeof result === "object" && result.error) {
-            setError(result.error);
-          }
-        } catch (err) {
-          unstable_rethrow(err);
-          const message =
-            err instanceof Error && err.message
-              ? err.message
-              : "No se pudo guardar. Revisá los datos e intentá de nuevo.";
-          setError(
-            message.includes("NEXT_") ||
-              message === "An error occurred in the Server Components render."
-              ? "No se pudo guardar. Revisá los datos e intentá de nuevo."
-              : message
-          );
-        }
-      }}
+      encType={encType}
+      action={formAction}
       onSubmit={(e) => {
         const form = e.currentTarget;
         if (form.dataset.submitting === "1") {

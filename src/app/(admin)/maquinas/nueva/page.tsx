@@ -13,11 +13,15 @@ export default function NuevaMaquinaPage() {
     <div>
       <PageHeader
         title="Agregar máquina"
-        description="Creá un modelo en el catálogo. En CubiScan, si el modelo es 100, 110, 150, 200 o 325 se usa la foto cubiscan de ese número."
+        description="Creá un modelo en el catálogo. Podés subir una foto propia; si no, CubiScan 100/110/150/200/325 y AGH ODC/PDC/PDL usan una foto por defecto."
         action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
       />
       <Panel className="max-w-xl">
-        <GuardedForm action={createCatalogoMaquina} className="grid gap-4">
+        <GuardedForm
+          action={createCatalogoMaquina}
+          encType="multipart/form-data"
+          className="grid gap-4"
+        >
           <Field label="Marca *">
             <input
               name="marca"
