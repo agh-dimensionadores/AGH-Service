@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { asignarMaquina } from "@/app/actions";
-import { AsignacionModalidadFields } from "@/components/asignacion-modalidad";
 import { AsignacionCatalogoYSerie } from "@/components/asignacion-serie";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { UnidadFotosField } from "@/components/unidad-fotos-field";
@@ -23,7 +22,7 @@ export default async function AsignarMaquinaPage({
   searchParams: Promise<{ clienteId?: string; catalogoId?: string }>;
 }) {
   const { clienteId, catalogoId } = await searchParams;
-  const [clientes, catalogo] = await Promise.all([
+  const [clientes, catalogo, stockDisponible] = await Promise.all([
     listClientes(),
     prismaPg.maquina.findMany({
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
@@ -33,6 +32,20 @@ export default async function AsignarMaquinaPage({
         modelo: true,
         imagenMime: true,
         imagenUpdatedAt: true,
+      },
+    }),
+    prismaPg.maquinaStock.findMany({
+      where: { estado: "disponible" },
+      orderBy: { creadoEn: "asc" },
+      select: {
+        id: true,
+        idMaquina: true,
+        numeroSerie: true,
+        fechaImportacion: true,
+        despachoImportacion: true,
+        po: true,
+        origen: true,
+        valorFo: true,
       },
     }),
   ]);
@@ -47,12 +60,28 @@ export default async function AsignarMaquinaPage({
       : null,
   }));
 
+  const stockForClient = stockDisponible.map((s) => ({
+    id: s.id,
+    idMaquina: s.idMaquina,
+    numeroSerie: s.numeroSerie,
+    fechaImportacion: s.fechaImportacion.toISOString().slice(0, 10),
+    despachoImportacion: s.despachoImportacion,
+    po: s.po,
+    origen: s.origen,
+    valorFo: s.valorFo.toString(),
+  }));
+
   return (
     <div>
       <PageHeader
         title="Asignar máquina"
-        description="Venta o alquiler: nro. de serie (prefijo del modelo o solo números en CubiScan), sitio y fechas."
-        action={<SecondaryLink href="/maquinas">Volver</SecondaryLink>}
+        description="AGH: venta o alquiler. Cubiscan / Conlida / Cubetape: requieren stock disponible."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <SecondaryLink href="/maquinas/stock">Stock</SecondaryLink>
+            <SecondaryLink href="/maquinas">Volver</SecondaryLink>
+          </div>
+        }
       />
       <Panel className="max-w-2xl">
         {catalogo.length === 0 ? (
@@ -75,6 +104,7 @@ export default async function AsignarMaquinaPage({
           <GuardedForm action={asignarMaquina} className="grid gap-4 sm:grid-cols-2">
             <AsignacionCatalogoYSerie
               catalogo={catalogoForClient}
+              stockDisponible={stockForClient}
               defaultCatalogoId={catalogoId}
             />
 
@@ -95,8 +125,6 @@ export default async function AsignarMaquinaPage({
                 ))}
               </select>
             </Field>
-
-            <AsignacionModalidadFields />
 
             <Field label="Fecha de fabricación">
               <input
@@ -156,6 +184,7 @@ export default async function AsignarMaquinaPage({
             <UnidadFotosField />
             <div className="sm:col-span-2 flex flex-wrap gap-2">
               <SubmitButton>Asignar al cliente</SubmitButton>
+              <PrimaryLink href="/maquinas/stock/nuevo">Agregar stock</PrimaryLink>
               <PrimaryLink href="/maquinas/nueva">Agregar otra al catálogo</PrimaryLink>
             </div>
           </GuardedForm>

@@ -151,6 +151,39 @@ async function ensureTables() {
     CREATE INDEX IF NOT EXISTS clientes_mantenimientos_fotos_mant_idx
       ON clientes_mantenimientos_fotos (id_mantenimiento)
   `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS maquinas_stock (
+      id SERIAL PRIMARY KEY,
+      id_maquina INTEGER NOT NULL REFERENCES maquinas(idmachine),
+      numero_serie VARCHAR(100) UNIQUE,
+      fecha_importacion DATE NOT NULL,
+      despacho_importacion VARCHAR(100) NOT NULL,
+      po VARCHAR(100) NOT NULL,
+      origen VARCHAR(150) NOT NULL,
+      valor_fo NUMERIC(14, 2) NOT NULL,
+      estado VARCHAR(20) NOT NULL DEFAULT 'disponible',
+      id_cliente_maquina INTEGER UNIQUE
+        REFERENCES clientes_maquinas(id) ON DELETE SET NULL,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE maquinas_stock
+      ADD COLUMN IF NOT EXISTS numero_serie VARCHAR(100)
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS maquinas_stock_numero_serie_key
+      ON maquinas_stock (numero_serie)
+      WHERE numero_serie IS NOT NULL
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS maquinas_stock_maquina_idx
+      ON maquinas_stock (id_maquina)
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS maquinas_stock_estado_idx
+      ON maquinas_stock (estado)
+  `);
 }
 
 async function seedIfNeeded() {

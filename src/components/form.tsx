@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { unstable_rethrow } from "next/navigation";
 
-type ServerAction = (formData: FormData) => void | Promise<void>;
+export type ActionResult = { error: string } | void | undefined;
+
+type ServerAction = (formData: FormData) => ActionResult | Promise<ActionResult>;
 
 /** Evita doble envío mientras el POST a PostgreSQL (remoto) está en curso. */
 export function GuardedForm({
@@ -15,10 +18,32 @@ export function GuardedForm({
   className?: string;
   children: React.ReactNode;
 }) {
+  const [error, setError] = useState<string | null>(null);
+
   return (
     <form
       className={className}
-      action={action}
+      action={async (formData) => {
+        setError(null);
+        try {
+          const result = await action(formData);
+          if (result && typeof result === "object" && result.error) {
+            setError(result.error);
+          }
+        } catch (err) {
+          unstable_rethrow(err);
+          const message =
+            err instanceof Error && err.message
+              ? err.message
+              : "No se pudo guardar. Revisá los datos e intentá de nuevo.";
+          setError(
+            message.includes("NEXT_") ||
+              message === "An error occurred in the Server Components render."
+              ? "No se pudo guardar. Revisá los datos e intentá de nuevo."
+              : message
+          );
+        }
+      }}
       onSubmit={(e) => {
         const form = e.currentTarget;
         if (form.dataset.submitting === "1") {
@@ -29,6 +54,14 @@ export function GuardedForm({
         form.dataset.submitting = "1";
       }}
     >
+      {error ? (
+        <div
+          className="sm:col-span-2 rounded-lg border border-[rgba(255,80,80,0.35)] bg-[rgba(255,80,80,0.08)] px-3 py-2 text-sm text-[var(--danger)]"
+          role="alert"
+        >
+          {error}
+        </div>
+      ) : null}
       {children}
       <FormPendingHint />
       <FormSubmitUnlock />
@@ -40,7 +73,7 @@ function FormPendingHint() {
   const { pending } = useFormStatus();
   if (!pending) return null;
   return (
-    <p className="mt-3 text-sm text-[var(--accent)]" role="status">
+    <p className="mt-3 text-sm text-[var(--accent)] sm:col-span-2" role="status">
       Cargando…
     </p>
   );

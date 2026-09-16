@@ -36,6 +36,7 @@ model Maquina {
   /// Aparece de base en /maquinas (los modelos más usados)
   favorito        Boolean          @default(false)
   instalaciones   ClienteMaquina[]
+  stock           MaquinaStock[]
 
   @@map("maquinas")
 }
@@ -63,6 +64,7 @@ model ClienteMaquina {
   mantenimientos   ClienteMantenimiento[]
   alquileres       MaquinaAlquiler[]
   fotos            ClienteMaquinaFoto[]
+  stockOrigen      MaquinaStock?
 
   @@map("clientes_maquinas")
 }
@@ -79,6 +81,30 @@ model ClienteMaquinaFoto {
 
   @@index([idClienteMaquina])
   @@map("clientes_maquinas_fotos")
+}
+
+/// Unidades en depósito (Cubiscan / Conlida / Cubetape) antes de asignar a un cliente.
+model MaquinaStock {
+  id                   Int             @id @default(autoincrement())
+  idMaquina            Int             @map("id_maquina")
+  /// Nro. de serie de la unidad en depósito (único)
+  numeroSerie          String?         @unique @map("numero_serie") @db.VarChar(100)
+  fechaImportacion     DateTime        @map("fecha_importacion") @db.Date
+  despachoImportacion  String          @map("despacho_importacion") @db.VarChar(100)
+  po                   String          @db.VarChar(100)
+  origen               String          @db.VarChar(150)
+  /// Valor FO (foreign / factura de origen)
+  valorFo              Decimal         @map("valor_fo") @db.Decimal(14, 2)
+  /// disponible | asignado
+  estado               String          @default("disponible") @db.VarChar(20)
+  idClienteMaquina     Int?            @unique @map("id_cliente_maquina")
+  creadoEn             DateTime        @default(now()) @map("creado_en") @db.Timestamptz(6)
+  maquina              Maquina         @relation(fields: [idMaquina], references: [idmachine])
+  instalacion          ClienteMaquina? @relation(fields: [idClienteMaquina], references: [id], onDelete: SetNull)
+
+  @@index([idMaquina])
+  @@index([estado])
+  @@map("maquinas_stock")
 }
 
 /// Períodos de alquiler de una unidad instalada.

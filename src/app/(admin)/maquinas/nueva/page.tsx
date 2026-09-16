@@ -19,7 +19,23 @@ export default function NuevaMaquinaPage() {
       <Panel className="max-w-xl">
         <GuardedForm action={createCatalogoMaquina} className="grid gap-4">
           <Field label="Marca *">
-            <input name="marca" required defaultValue="AGH" className={inputClass} />
+            <input
+              name="marca"
+              required
+              defaultValue="AGH"
+              className={inputClass}
+              list="marcas-catalogo"
+            />
+            <datalist id="marcas-catalogo">
+              <option value="AGH" />
+              <option value="CUBISCAN" />
+              <option value="Conlida" />
+              <option value="Cubetape" />
+            </datalist>
+            <p className="mt-1 text-xs text-[var(--ink-muted)]">
+              Cubiscan / Conlida / Cubetape se asignan desde stock. AGH: venta o
+              alquiler directo.
+            </p>
           </Field>
           <Field label="Modelo">
             <input

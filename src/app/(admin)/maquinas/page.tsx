@@ -16,10 +16,11 @@ import {
   labelEstado,
   machineName,
 } from "@/lib/utils";
+import { marcaUsaStock } from "@/lib/marcas";
 
 export const dynamic = "force-dynamic";
 
-const MARCAS = ["AGH", "CUBISCAN", "Conlida"] as const;
+const MARCAS = ["AGH", "CUBISCAN", "Conlida", "Cubetape"] as const;
 
 function normalizeMarca(value: string) {
   return value.trim().toLowerCase();
@@ -43,7 +44,7 @@ export default async function MaquinasPage({
   const verTodas = vistaParam === "todas" || Boolean(marcaActiva);
   const verFavoritas = !verTodas;
 
-  const [catalogoAll, unidadesAll] = await Promise.all([
+  const [catalogoAll, unidadesAll, stockDisponible] = await Promise.all([
     prismaPg.maquina.findMany({
       orderBy: [{ marca: "asc" }, { modelo: "asc" }],
       select: {
@@ -73,7 +74,16 @@ export default async function MaquinasPage({
         _count: { select: { mantenimientos: true } },
       },
     }),
+    prismaPg.maquinaStock.groupBy({
+      by: ["idMaquina"],
+      where: { estado: "disponible" },
+      _count: { _all: true },
+    }),
   ]);
+
+  const stockMap = new Map(
+    stockDisponible.map((s) => [s.idMaquina, s._count._all])
+  );
 
   const hayFavoritos = catalogoAll.some((item) => item.favorito);
 
@@ -102,6 +112,7 @@ export default async function MaquinasPage({
         action={
           <div className="flex flex-wrap gap-2">
             <PrimaryLink href="/maquinas/nueva">Agregar máquina</PrimaryLink>
+            <SecondaryLink href="/maquinas/stock">Stock</SecondaryLink>
             <SecondaryLink href="/maquinas/asignar">Asignar</SecondaryLink>
           </div>
         }
@@ -196,6 +207,9 @@ export default async function MaquinasPage({
                   <p className="text-xs text-[var(--ink-muted)]">
                     {item._count.instalaciones} asignada
                     {item._count.instalaciones === 1 ? "" : "s"}
+                    {marcaUsaStock(item.marca)
+                      ? ` · stock ${stockMap.get(item.idmachine) ?? 0}`
+                      : ""}
                     {!maquinaImageSrc(item) ? " · sin foto" : ""}
                   </p>
                   <p className="mt-2 text-xs text-[var(--accent)]">
