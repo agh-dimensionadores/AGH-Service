@@ -22,7 +22,9 @@ import {
 import { prismaPg } from "@/lib/prisma";
 import {
   MAX_FOTO_MANTENIMIENTO_BYTES,
+  MAX_FOTO_UNIDAD_BYTES,
   MAX_FOTOS_MANTENIMIENTO,
+  MAX_FOTOS_UNIDAD,
   readUploadedImage,
 } from "@/lib/uploads";
 import { getCliente, clienteLabel } from "@/lib/clientes";
@@ -518,7 +520,9 @@ export async function asignarMaquina(formData: FormData) {
     });
   }
 
-  touch("/maquinas", `/clientes/${idCliente}`);
+  await saveUnidadFotos(unidad.id, formData);
+
+  touch("/maquinas", `/clientes/${idCliente}`, `/maquinas/${unidad.id}`);
   redirect(`/maquinas/${unidad.id}`);
 }
 
@@ -562,6 +566,8 @@ export async function updateMaquina(id: number, formData: FormData) {
       fechaFabricacion: optionalDate(formData, "fechaFabricacion"),
     },
   });
+
+  await saveUnidadFotos(id, formData);
 
   touch(`/maquinas/${id}`, "/maquinas", `/clientes/${idCliente}`);
   redirect(`/maquinas/${id}`);
@@ -905,6 +911,62 @@ function resolveFirmas(
     ? fromFormCli
     : saved?.firmaCliente || "";
   return { firmaIngeniero, firmaCliente };
+}
+
+async function ensureUnidadFotosTable() {
+  await prismaPg.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS clientes_maquinas_fotos (
+      id SERIAL PRIMARY KEY,
+      id_cliente_maquina INTEGER NOT NULL
+        REFERENCES clientes_maquinas(id) ON DELETE CASCADE,
+      imagen BYTEA NOT NULL,
+      imagen_mime VARCHAR(50) NOT NULL,
+      orden INTEGER NOT NULL DEFAULT 0,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await prismaPg.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS clientes_maquinas_fotos_unidad_idx
+      ON clientes_maquinas_fotos (id_cliente_maquina)
+  `);
+}
+
+async function saveUnidadFotos(idClienteMaquina: number, formData: FormData) {
+  await ensureUnidadFotosTable();
+
+  const quitar = formData
+    .getAll("quitarFotoUnidad")
+    .map((v) => Number(v))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (quitar.length) {
+    await prismaPg.clienteMaquinaFoto.deleteMany({
+      where: { id: { in: quitar }, idClienteMaquina },
+    });
+  }
+
+  const remaining = await prismaPg.clienteMaquinaFoto.count({
+    where: { idClienteMaquina },
+  });
+  const slots = Math.max(0, MAX_FOTOS_UNIDAD - remaining);
+  const files = formData
+    .getAll("fotosUnidad")
+    .filter((v): v is File => v instanceof File && v.size > 0)
+    .slice(0, slots);
+
+  let ordenN = remaining;
+  for (const file of files) {
+    const image = await readUploadedImage(file, MAX_FOTO_UNIDAD_BYTES);
+    if (!image) continue;
+    await prismaPg.clienteMaquinaFoto.create({
+      data: {
+        idClienteMaquina,
+        imagen: Buffer.from(image.bytes),
+        imagenMime: image.mime,
+        orden: ordenN,
+      },
+    });
+    ordenN += 1;
+  }
 }
 
 async function ensureCubiscanFotosTable() {

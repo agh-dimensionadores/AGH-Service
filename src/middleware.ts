@@ -48,7 +48,9 @@ export async function middleware(req: NextRequest) {
       pathname.startsWith("/portal/") ||
       pathname === "/login" ||
       // Fotos del catálogo (usadas en el portal)
-      /^\/api\/maquinas\/\d+\/imagen\/?$/.test(pathname);
+      /^\/api\/maquinas\/\d+\/imagen\/?$/.test(pathname) ||
+      // Fotos de la unidad instalada
+      /^\/api\/maquinas\/\d+\/fotos\/\d+\/?$/.test(pathname);
     if (!allowed) {
       return NextResponse.redirect(new URL("/portal", req.url));
     }

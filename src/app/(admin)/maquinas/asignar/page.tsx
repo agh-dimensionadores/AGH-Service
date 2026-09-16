@@ -3,6 +3,7 @@ import { asignarMaquina } from "@/app/actions";
 import { AsignacionModalidadFields } from "@/components/asignacion-modalidad";
 import { AsignacionCatalogoYSerie } from "@/components/asignacion-serie";
 import { GuardedForm, SubmitButton } from "@/components/form";
+import { UnidadFotosField } from "@/components/unidad-fotos-field";
 import { prismaPg } from "@/lib/prisma";
 import { listClientes, clienteLabel } from "@/lib/clientes";
 import {
@@ -152,6 +153,7 @@ export default async function AsignarMaquinaPage({
                 autoComplete="off"
               />
             </Field>
+            <UnidadFotosField />
             <div className="sm:col-span-2 flex flex-wrap gap-2">
               <SubmitButton>Asignar al cliente</SubmitButton>
               <PrimaryLink href="/maquinas/nueva">Agregar otra al catálogo</PrimaryLink>

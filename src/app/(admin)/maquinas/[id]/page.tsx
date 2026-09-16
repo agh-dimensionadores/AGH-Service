@@ -8,6 +8,7 @@ import {
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
 import { DiasRestantesAlquiler } from "@/components/dias-restantes-alquiler";
 import { NumeroSerieConPrefijo } from "@/components/numero-serie-prefijo";
+import { UnidadFotosField } from "@/components/unidad-fotos-field";
 import { prismaPg } from "@/lib/prisma";
 import {
   listClientes,
@@ -71,6 +72,7 @@ export default async function MaquinaDetallePage({
         },
         mantenimientos: { orderBy: { solicitado: "desc" } },
         alquileres: { orderBy: { fechaInicio: "desc" } },
+        fotos: { select: { id: true }, orderBy: { orden: "asc" } },
       },
     }),
     listClientes(),
@@ -238,6 +240,10 @@ export default async function MaquinaDetallePage({
                   className={inputClass}
                 />
               </Field>
+              <UnidadFotosField
+                unidadId={unidad.id}
+                existing={unidad.fotos}
+              />
               <div className="flex flex-wrap gap-2">
                 <SubmitButton>Guardar cambios</SubmitButton>
                 <DangerButton formAction={remove}>Eliminar equipo</DangerButton>

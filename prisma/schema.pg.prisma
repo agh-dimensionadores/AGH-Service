@@ -60,8 +60,23 @@ model ClienteMaquina {
   maquina          Maquina                 @relation(fields: [idMaquina], references: [idmachine])
   mantenimientos   ClienteMantenimiento[]
   alquileres       MaquinaAlquiler[]
+  fotos            ClienteMaquinaFoto[]
 
   @@map("clientes_maquinas")
+}
+
+/// Fotos de la unidad instalada (PC, instalación, periféricos, etc.).
+model ClienteMaquinaFoto {
+  id               Int            @id @default(autoincrement())
+  idClienteMaquina Int            @map("id_cliente_maquina")
+  imagen           Bytes
+  imagenMime       String         @map("imagen_mime") @db.VarChar(50)
+  orden            Int            @default(0)
+  creadoEn         DateTime       @default(now()) @map("creado_en") @db.Timestamptz(6)
+  instalacion      ClienteMaquina @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
+
+  @@index([idClienteMaquina])
+  @@map("clientes_maquinas_fotos")
 }
 
 /// Períodos de alquiler de una unidad instalada.

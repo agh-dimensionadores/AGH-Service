@@ -1,6 +1,8 @@
 const MAX_BYTES = 5 * 1024 * 1024;
 export const MAX_FOTO_MANTENIMIENTO_BYTES = 2 * 1024 * 1024;
 export const MAX_FOTOS_MANTENIMIENTO = 6;
+export const MAX_FOTO_UNIDAD_BYTES = 2 * 1024 * 1024;
+export const MAX_FOTOS_UNIDAD = 8;
 
 export type UploadedImage = {
   bytes: Uint8Array;

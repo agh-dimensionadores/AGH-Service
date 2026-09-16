@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireCliente } from "@/lib/auth";
 import { prismaPg } from "@/lib/prisma";
 import { MachineThumb } from "@/components/machine-thumb";
+import { PhotoGallery } from "@/components/image-lightbox";
 import {
   Badge,
   PageHeader,
@@ -35,6 +36,7 @@ export default async function PortalMaquinaPage({
     include: {
       maquina: true,
       mantenimientos: { orderBy: { solicitado: "desc" } },
+      fotos: { select: { id: true }, orderBy: { orden: "asc" } },
     },
   });
 
@@ -125,6 +127,20 @@ export default async function PortalMaquinaPage({
               </dd>
             </div>
           </dl>
+          {unidad.fotos.length ? (
+            <div className="mt-5">
+              <p className="mb-2 text-sm text-[var(--ink-muted)]">
+                Fotos · clic para ampliar
+              </p>
+              <PhotoGallery
+                photos={unidad.fotos.map((foto) => ({
+                  id: foto.id,
+                  src: `/api/maquinas/${unidad.id}/fotos/${foto.id}`,
+                  alt: `Foto ${foto.id}`,
+                }))}
+              />
+            </div>
+          ) : null}
         </Panel>
 
         <Panel>
