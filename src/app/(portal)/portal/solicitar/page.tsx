@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { solicitarMantenimientoCliente } from "@/app/actions";
 import { GuardedForm, SubmitButton } from "@/components/form";
+import { SolicitudFotosField } from "@/components/solicitud-fotos-field";
 import { requireCliente } from "@/lib/auth";
 import { prismaPg } from "@/lib/prisma";
 import {
@@ -91,6 +92,7 @@ export default async function PortalSolicitarPage({
                 placeholder="Contanos qué ocurre, desde cuándo y si hay mensajes de error..."
               />
             </Field>
+            <SolicitudFotosField />
             <SubmitButton className="btn-primary w-fit">
               Enviar solicitud
             </SubmitButton>

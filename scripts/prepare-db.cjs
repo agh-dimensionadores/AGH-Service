@@ -131,6 +131,21 @@ async function ensureTables() {
     CREATE INDEX IF NOT EXISTS clientes_maquinas_fotos_unidad_idx
       ON clientes_maquinas_fotos (id_cliente_maquina)
   `);
+  await db.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS clientes_mantenimientos_fotos (
+      id SERIAL PRIMARY KEY,
+      id_mantenimiento INTEGER NOT NULL
+        REFERENCES clientes_mantenimientos(id) ON DELETE CASCADE,
+      imagen BYTEA NOT NULL,
+      imagen_mime VARCHAR(50) NOT NULL,
+      orden INTEGER NOT NULL DEFAULT 0,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS clientes_mantenimientos_fotos_mant_idx
+      ON clientes_mantenimientos_fotos (id_mantenimiento)
+  `);
 }
 
 async function seedIfNeeded() {

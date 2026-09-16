@@ -22,8 +22,10 @@ import {
 import { prismaPg } from "@/lib/prisma";
 import {
   MAX_FOTO_MANTENIMIENTO_BYTES,
+  MAX_FOTO_SOLICITUD_BYTES,
   MAX_FOTO_UNIDAD_BYTES,
   MAX_FOTOS_MANTENIMIENTO,
+  MAX_FOTOS_SOLICITUD,
   MAX_FOTOS_UNIDAD,
   readUploadedImage,
 } from "@/lib/uploads";
@@ -350,7 +352,7 @@ export async function solicitarMantenimientoCliente(formData: FormData) {
   });
   if (!unidad) throw new Error("Máquina no válida");
 
-  await prismaPg.clienteMantenimiento.create({
+  const item = await prismaPg.clienteMantenimiento.create({
     data: {
       idClienteMaquina,
       tipo,
@@ -360,11 +362,14 @@ export async function solicitarMantenimientoCliente(formData: FormData) {
     },
   });
 
+  await saveMantenimientoFotos(item.id, formData);
+
   touch(
     "/portal",
     "/portal/historial",
     `/portal/maquinas/${idClienteMaquina}`,
-    "/mantenimientos"
+    "/mantenimientos",
+    `/mantenimientos/${item.id}`
   );
   redirect("/portal/historial?ok=1");
 }
@@ -648,7 +653,7 @@ export async function createMantenimiento(formData: FormData) {
   const descripcion = optionalStr(formData, "descripcion");
   if (!tipo) throw new Error("El tipo es obligatorio");
 
-  await prismaPg.clienteMantenimiento.create({
+  const item = await prismaPg.clienteMantenimiento.create({
     data: {
       idClienteMaquina,
       tipo,
@@ -660,7 +665,14 @@ export async function createMantenimiento(formData: FormData) {
     },
   });
 
-  touch("/mantenimientos", "/calendario", `/maquinas/${idClienteMaquina}`);
+  await saveMantenimientoFotos(item.id, formData);
+
+  touch(
+    "/mantenimientos",
+    "/calendario",
+    `/maquinas/${idClienteMaquina}`,
+    `/mantenimientos/${item.id}`
+  );
   redirect(`/maquinas/${idClienteMaquina}`);
 }
 
@@ -911,6 +923,55 @@ function resolveFirmas(
     ? fromFormCli
     : saved?.firmaCliente || "";
   return { firmaIngeniero, firmaCliente };
+}
+
+async function ensureMantenimientoFotosTable() {
+  await prismaPg.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS clientes_mantenimientos_fotos (
+      id SERIAL PRIMARY KEY,
+      id_mantenimiento INTEGER NOT NULL
+        REFERENCES clientes_mantenimientos(id) ON DELETE CASCADE,
+      imagen BYTEA NOT NULL,
+      imagen_mime VARCHAR(50) NOT NULL,
+      orden INTEGER NOT NULL DEFAULT 0,
+      creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await prismaPg.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS clientes_mantenimientos_fotos_mant_idx
+      ON clientes_mantenimientos_fotos (id_mantenimiento)
+  `);
+}
+
+async function saveMantenimientoFotos(
+  idMantenimiento: number,
+  formData: FormData
+) {
+  await ensureMantenimientoFotosTable();
+
+  const remaining = await prismaPg.clienteMantenimientoFoto.count({
+    where: { idMantenimiento },
+  });
+  const slots = Math.max(0, MAX_FOTOS_SOLICITUD - remaining);
+  const files = formData
+    .getAll("fotosSolicitud")
+    .filter((v): v is File => v instanceof File && v.size > 0)
+    .slice(0, slots);
+
+  let ordenN = remaining;
+  for (const file of files) {
+    const image = await readUploadedImage(file, MAX_FOTO_SOLICITUD_BYTES);
+    if (!image) continue;
+    await prismaPg.clienteMantenimientoFoto.create({
+      data: {
+        idMantenimiento,
+        imagen: Buffer.from(image.bytes),
+        imagenMime: image.mime,
+        orden: ordenN,
+      },
+    });
+    ordenN += 1;
+  }
 }
 
 async function ensureUnidadFotosTable() {

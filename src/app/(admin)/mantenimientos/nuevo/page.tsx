@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createMantenimiento } from "@/app/actions";
 import { GuardedForm, SubmitButton } from "@/components/form";
+import { SolicitudFotosField } from "@/components/solicitud-fotos-field";
 import { prismaPg } from "@/lib/prisma";
 import { getClientesMap, clienteLabel } from "@/lib/clientes";
 import {
@@ -90,6 +91,9 @@ export default async function NuevoMantenimientoPage({
                   placeholder="Detalle del trabajo..."
                 />
               </Field>
+            </div>
+            <div className="sm:col-span-2">
+              <SolicitudFotosField />
             </div>
             <div className="sm:col-span-2">
               <SubmitButton>Guardar solicitud</SubmitButton>

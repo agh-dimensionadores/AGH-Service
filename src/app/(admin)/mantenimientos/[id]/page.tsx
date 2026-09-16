@@ -6,6 +6,7 @@ import {
 } from "@/app/actions";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { DownloadPdfButton } from "@/components/download-pdf-button";
+import { PhotoGallery } from "@/components/image-lightbox";
 import { prismaPg } from "@/lib/prisma";
 import { getCliente, clienteLabel } from "@/lib/clientes";
 import {
@@ -65,6 +66,7 @@ export default async function MantenimientoDetallePage({
     include: {
       instalacion: { include: { maquina: true } },
       ordenCubiscan: true,
+      fotosSolicitud: { select: { id: true }, orderBy: { orden: "asc" } },
     },
   });
 
@@ -174,6 +176,22 @@ export default async function MantenimientoDetallePage({
                 {item.descripcion?.trim() || "Sin descripción"}
               </dd>
             </div>
+            {item.fotosSolicitud.length ? (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-[var(--ink-muted)]">
+                  Fotos del pedido · clic para ampliar
+                </dt>
+                <dd className="mt-2">
+                  <PhotoGallery
+                    photos={item.fotosSolicitud.map((foto) => ({
+                      id: foto.id,
+                      src: `/api/mantenimientos/${item.id}/fotos/${foto.id}`,
+                      alt: `Foto solicitud ${foto.id}`,
+                    }))}
+                  />
+                </dd>
+              </div>
+            ) : null}
           </dl>
         </div>
 

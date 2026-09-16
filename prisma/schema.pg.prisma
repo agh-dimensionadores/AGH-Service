@@ -115,8 +115,23 @@ model ClienteMantenimiento {
   comentarioArreglo String?         @map("comentario_arreglo")
   instalacion       ClienteMaquina? @relation(fields: [idClienteMaquina], references: [id], onDelete: Cascade)
   ordenCubiscan     CubiscanOrdenServicio?
+  fotosSolicitud    ClienteMantenimientoFoto[]
 
   @@map("clientes_mantenimientos")
+}
+
+/// Fotos adjuntas al pedir el mantenimiento (cliente o admin).
+model ClienteMantenimientoFoto {
+  id              Int                  @id @default(autoincrement())
+  idMantenimiento Int                  @map("id_mantenimiento")
+  imagen          Bytes
+  imagenMime      String               @map("imagen_mime") @db.VarChar(50)
+  orden           Int                  @default(0)
+  creadoEn        DateTime             @default(now()) @map("creado_en") @db.Timestamptz(6)
+  mantenimiento   ClienteMantenimiento @relation(fields: [idMantenimiento], references: [id], onDelete: Cascade)
+
+  @@index([idMantenimiento])
+  @@map("clientes_mantenimientos_fotos")
 }
 
 /// Planilla de Orden de Servicio CubiScan (al cerrar mantenimiento).
