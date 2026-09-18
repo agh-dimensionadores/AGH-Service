@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prismaPg } from "@/lib/prisma";
 import { getClientesMap, clienteLabel } from "@/lib/clientes";
 import { MachineThumb } from "@/components/machine-thumb";
+import { IconSearch } from "@/components/icons";
 import { maquinaImageSrc } from "@/lib/maquina-images";
 import {
   Badge,
@@ -10,6 +11,7 @@ import {
   PrimaryLink,
   SecondaryLink,
   estadoTone,
+  inputClass,
 } from "@/components/ui";
 import {
   equipoEstado,
@@ -32,16 +34,36 @@ function chipClass(active: boolean) {
     : "rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--ink-muted)] hover:border-[rgba(182,255,59,0.35)] hover:text-white";
 }
 
+function matchesQ(haystack: string | null | undefined, q: string) {
+  if (!haystack) return false;
+  return haystack.toLowerCase().includes(q.toLowerCase());
+}
+
+function maquinasHref(opts: {
+  q?: string;
+  marca?: string;
+  vista?: string;
+}) {
+  const params = new URLSearchParams();
+  if (opts.q) params.set("q", opts.q);
+  if (opts.marca) params.set("marca", opts.marca);
+  if (opts.vista) params.set("vista", opts.vista);
+  const s = params.toString();
+  return s ? `/maquinas?${s}` : "/maquinas";
+}
+
 export default async function MaquinasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ marca?: string; vista?: string }>;
+  searchParams: Promise<{ marca?: string; vista?: string; q?: string }>;
 }) {
-  const { marca: marcaParam, vista: vistaParam } = await searchParams;
+  const { marca: marcaParam, vista: vistaParam, q: qRaw } = await searchParams;
+  const q = (qRaw || "").trim();
   const marcaActiva = MARCAS.find(
     (m) => normalizeMarca(m) === normalizeMarca(marcaParam ?? "")
   );
-  const verTodas = vistaParam === "todas" || Boolean(marcaActiva);
+  // Con búsqueda, mostramos todo lo que matchee (no solo favoritos).
+  const verTodas = vistaParam === "todas" || Boolean(marcaActiva) || Boolean(q);
   const verFavoritas = !verTodas;
 
   const [catalogoAll, unidadesAll, stockDisponible] = await Promise.all([
@@ -106,10 +128,39 @@ export default async function MaquinasPage({
 
   const clientesMap = await getClientesMap(unidades.map((u) => u.idCliente));
 
+  if (q) {
+    const asId = Number(q);
+    const matchId = Number.isInteger(asId) && asId > 0;
+    catalogo = catalogo.filter(
+      (item) =>
+        matchesQ(item.marca, q) ||
+        matchesQ(item.modelo, q) ||
+        matchesQ(`${item.marca} ${item.modelo ?? ""}`, q) ||
+        (matchId && item.idmachine === asId)
+    );
+    unidades = unidades.filter((u) => {
+      const cliente = clientesMap.get(u.idCliente);
+      return (
+        matchesQ(u.maquina.marca, q) ||
+        matchesQ(u.maquina.modelo, q) ||
+        matchesQ(`${u.maquina.marca} ${u.maquina.modelo ?? ""}`, q) ||
+        matchesQ(u.numeroSerie, q) ||
+        matchesQ(u.sitio, q) ||
+        matchesQ(cliente?.nombre, q) ||
+        matchesQ(cliente?.empresa, q) ||
+        matchesQ(clienteLabel(cliente), q) ||
+        (matchId && (u.id === asId || u.idMaquina === asId))
+      );
+    });
+  }
+
+  const hayFiltros = Boolean(q || marcaActiva || vistaParam === "todas");
+
   return (
     <div>
       <PageHeader
         title="Máquinas"
+        description="Buscá por marca, modelo, cliente, nro. de serie o sitio."
         action={
           <div className="flex flex-wrap gap-2">
             <PrimaryLink href="/maquinas/nueva">Agregar máquina</PrimaryLink>
@@ -119,14 +170,53 @@ export default async function MaquinasPage({
         }
       />
 
+      <form
+        method="get"
+        className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-4"
+      >
+        <div className="min-w-[14rem] flex-1">
+          <label className="mb-1.5 block text-sm text-[var(--ink-muted)]">
+            Buscar
+          </label>
+          <div className="relative">
+            <IconSearch className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--ink-muted)]" />
+            <input
+              name="q"
+              type="search"
+              defaultValue={q}
+              placeholder="Marca, modelo, cliente, serie…"
+              className={`${inputClass} field-input-with-icon`}
+            />
+          </div>
+        </div>
+        {marcaActiva ? (
+          <input type="hidden" name="marca" value={marcaActiva} />
+        ) : null}
+        {vistaParam === "todas" && !marcaActiva ? (
+          <input type="hidden" name="vista" value="todas" />
+        ) : null}
+        <button type="submit" className="btn-primary">
+          Buscar
+        </button>
+        {hayFiltros ? (
+          <SecondaryLink href="/maquinas">Limpiar</SecondaryLink>
+        ) : null}
+      </form>
+
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-[var(--ink-muted)]">
           Ver
         </span>
-        <Link href="/maquinas" className={chipClass(verFavoritas)}>
+        <Link
+          href={maquinasHref({ q: q || undefined })}
+          className={chipClass(verFavoritas)}
+        >
           Favoritas
         </Link>
-        <Link href="/maquinas?vista=todas" className={chipClass(vistaParam === "todas")}>
+        <Link
+          href={maquinasHref({ q: q || undefined, vista: "todas" })}
+          className={chipClass(vistaParam === "todas" || (Boolean(q) && !marcaActiva))}
+        >
           Todas
         </Link>
         <span className="mx-1 text-[var(--ink-muted)]">·</span>
@@ -136,7 +226,7 @@ export default async function MaquinasPage({
         {MARCAS.map((marca) => (
           <Link
             key={marca}
-            href={`/maquinas?marca=${encodeURIComponent(marca)}`}
+            href={maquinasHref({ q: q || undefined, marca })}
             className={chipClass(marcaActiva === marca)}
           >
             {marca}
@@ -154,6 +244,15 @@ export default async function MaquinasPage({
         </p>
       ) : null}
 
+      {q ? (
+        <p className="mb-3 text-sm text-[var(--ink-muted)]">
+          {catalogo.length + unidades.length} resultado
+          {catalogo.length + unidades.length === 1 ? "" : "s"}
+          {` para “${q}”`}
+          {marcaActiva ? ` · ${marcaActiva}` : ""}
+        </p>
+      ) : null}
+
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="brand-font text-lg font-semibold text-white">
@@ -167,21 +266,27 @@ export default async function MaquinasPage({
         {catalogo.length === 0 ? (
           <EmptyState
             title={
-              marcaActiva
-                ? `Sin modelos ${marcaActiva}`
-                : verFavoritas
-                  ? "Sin favoritos"
-                  : "Sin modelos en el catálogo"
+              q
+                ? "Sin modelos"
+                : marcaActiva
+                  ? `Sin modelos ${marcaActiva}`
+                  : verFavoritas
+                    ? "Sin favoritos"
+                    : "Sin modelos en el catálogo"
             }
             description={
-              marcaActiva
-                ? "No hay máquinas de esta marca en el catálogo."
-                : verFavoritas
-                  ? "Marcá los modelos que más usás en Configuración."
-                  : "Primero agregá una máquina con marca y modelo."
+              q
+                ? "Probá con otra marca, modelo o texto."
+                : marcaActiva
+                  ? "No hay máquinas de esta marca en el catálogo."
+                  : verFavoritas
+                    ? "Marcá los modelos que más usás en Configuración."
+                    : "Primero agregá una máquina con marca y modelo."
             }
             action={
-              verFavoritas && !marcaActiva ? (
+              q ? (
+                <SecondaryLink href="/maquinas">Ver todas</SecondaryLink>
+              ) : verFavoritas && !marcaActiva ? (
                 <PrimaryLink href="/configuracion">Ir a Configuración</PrimaryLink>
               ) : (
                 <PrimaryLink href="/maquinas/nueva">Agregar máquina</PrimaryLink>
@@ -234,18 +339,28 @@ export default async function MaquinasPage({
         {unidades.length === 0 ? (
           <EmptyState
             title={
-              marcaActiva
-                ? `Sin equipos ${marcaActiva} asignados`
-                : verFavoritas && hayFavoritos
-                  ? "Sin equipos de favoritos asignados"
-                  : "Nadie tiene equipos asignados"
+              q
+                ? "Sin equipos"
+                : marcaActiva
+                  ? `Sin equipos ${marcaActiva} asignados`
+                  : verFavoritas && hayFavoritos
+                    ? "Sin equipos de favoritos asignados"
+                    : "Nadie tiene equipos asignados"
             }
             description={
-              marcaActiva
-                ? "No hay unidades de esta marca asignadas a clientes."
-                : "Elegí un modelo del catálogo y asignalo a un cliente con nro. de serie y sitio."
+              q
+                ? "Probá con otra marca, modelo, cliente o nro. de serie."
+                : marcaActiva
+                  ? "No hay unidades de esta marca asignadas a clientes."
+                  : "Elegí un modelo del catálogo y asignalo a un cliente con nro. de serie y sitio."
             }
-            action={<PrimaryLink href="/maquinas/asignar">Asignar</PrimaryLink>}
+            action={
+              q ? (
+                <SecondaryLink href="/maquinas">Ver todas</SecondaryLink>
+              ) : (
+                <PrimaryLink href="/maquinas/asignar">Asignar</PrimaryLink>
+              )
+            }
           />
         ) : (
           <div className="table-wrap">

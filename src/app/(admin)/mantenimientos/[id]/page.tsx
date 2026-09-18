@@ -18,6 +18,7 @@ import {
   SecondaryLink,
   estadoTone,
   inputClass,
+  SuccessNotice,
 } from "@/components/ui";
 import {
   formatDate,
@@ -54,10 +55,10 @@ export default async function MantenimientoDetallePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ cerrado?: string }>;
+  searchParams: Promise<{ cerrado?: string; ok?: string }>;
 }) {
   const { id: idParam } = await params;
-  const { cerrado } = await searchParams;
+  const { cerrado, ok } = await searchParams;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
@@ -115,10 +116,10 @@ export default async function MantenimientoDetallePage({
         }
       />
 
+      {ok === "1" ? <SuccessNotice /> : null}
+
       {cerrado === "1" ? (
-        <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
-          Trabajo marcado como cerrado.
-        </p>
+        <SuccessNotice>Trabajo marcado como cerrado.</SuccessNotice>
       ) : null}
 
       <Panel className="max-w-2xl">

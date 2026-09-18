@@ -28,6 +28,7 @@ import {
   SecondaryLink,
   inputClass,
   estadoTone,
+  SuccessNotice,
 } from "@/components/ui";
 import {
   formatDate,
@@ -52,10 +53,10 @@ export default async function MaquinaDetallePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ alquiler?: string }>;
+  searchParams: Promise<{ alquiler?: string; ok?: string }>;
 }) {
   const { id: idParam } = await params;
-  const { alquiler: alquilerMsg } = await searchParams;
+  const { alquiler: alquilerMsg, ok } = await searchParams;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
@@ -120,16 +121,18 @@ export default async function MaquinaDetallePage({
         }
       />
 
+      {ok === "1" ? <SuccessNotice /> : null}
+
       {alquilerMsg === "ok" ||
       alquilerMsg === "nuevo" ||
       alquilerMsg === "liberada" ? (
-        <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
+        <SuccessNotice>
           {alquilerMsg === "nuevo"
             ? "Período de alquiler registrado."
             : alquilerMsg === "liberada"
               ? "Unidad liberada. El historial se conserva y la serie volvió a stock para reasignar."
               : "Alquiler actualizado."}
-        </p>
+        </SuccessNotice>
       ) : null}
 
       {liberada ? (

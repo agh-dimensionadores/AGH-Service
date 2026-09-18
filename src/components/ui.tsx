@@ -5,6 +5,8 @@ import {
   type NotificationItem,
 } from "@/components/notifications";
 
+export { SuccessNotice } from "@/components/success-notice";
+
 export function TopBar({
   title,
   subtitle,

@@ -153,7 +153,7 @@ export async function updateCliente(id: number, formData: FormData) {
   });
 
   touch(`/clientes/${id}`, "/clientes");
-  redirect(`/clientes/${id}`);
+  redirect(`/clientes/${id}?ok=1`);
 }
 
 export async function deleteCliente(id: number) {
@@ -868,7 +868,7 @@ export async function updateMaquina(
   await saveUnidadFotos(id, formData);
 
   touch(`/maquinas/${id}`, "/maquinas", `/clientes/${idCliente}`);
-  redirect(`/maquinas/${id}`);
+  redirect(`/maquinas/${id}?ok=1`);
 }
 
 /** Solo permite cambiar fecha de fin (y comentario) del alquiler activo. */
@@ -1108,7 +1108,7 @@ export async function updateMantenimiento(id: number, formData: FormData) {
     "/mantenimientos",
     "/calendario"
   );
-  redirect(`/mantenimientos/${id}`);
+  redirect(`/mantenimientos/${id}?ok=1`);
 }
 
 export async function cerrarMantenimiento(id: number, formData: FormData) {

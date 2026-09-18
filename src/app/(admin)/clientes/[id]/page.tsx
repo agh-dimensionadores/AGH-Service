@@ -20,6 +20,7 @@ import {
   SecondaryLink,
   inputClass,
   estadoTone,
+  SuccessNotice,
 } from "@/components/ui";
 import {
   formatDate,
@@ -35,10 +36,10 @@ export default async function ClienteDetallePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ cloudUser?: string; aghUser?: string }>;
+  searchParams: Promise<{ cloudUser?: string; aghUser?: string; ok?: string }>;
 }) {
   const { id: idParam } = await params;
-  const { cloudUser, aghUser } = await searchParams;
+  const { cloudUser, aghUser, ok } = await searchParams;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
@@ -92,6 +93,8 @@ export default async function ClienteDetallePage({
           </div>
         }
       />
+
+      {ok === "1" ? <SuccessNotice /> : null}
 
       <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <Panel>

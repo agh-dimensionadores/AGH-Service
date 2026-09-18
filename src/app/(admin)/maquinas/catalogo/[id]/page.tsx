@@ -12,6 +12,7 @@ import {
   Panel,
   SecondaryLink,
   inputClass,
+  SuccessNotice,
 } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -52,11 +53,7 @@ export default async function EditarCatalogoMaquinaPage({
       />
 
       <Panel className="max-w-xl">
-        {ok ? (
-          <p className="mb-4 rounded-xl bg-[var(--accent-dim)] px-4 py-3 text-sm text-[var(--accent)]">
-            Cambios guardados.
-          </p>
-        ) : null}
+        {ok === "1" ? <SuccessNotice /> : null}
         <MachineThumb
           maquina={item}
           alt={`${item.marca} ${item.modelo ?? ""}`}
