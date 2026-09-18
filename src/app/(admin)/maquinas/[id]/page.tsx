@@ -18,6 +18,7 @@ import {
   clienteLabel,
 } from "@/lib/clientes";
 import { MachineThumb } from "@/components/machine-thumb";
+import { marcaEsAgh } from "@/lib/marcas";
 import {
   Badge,
   EmptyState,
@@ -48,6 +49,16 @@ function toDateInput(value?: Date | null) {
   return `${y}-${m}-${day}`;
 }
 
+function formatStockMoney(value: { toString(): string } | null | undefined) {
+  if (value == null) return "—";
+  const n = Number(value.toString());
+  if (Number.isNaN(n)) return value.toString();
+  return n.toLocaleString("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 export default async function MaquinaDetallePage({
   params,
   searchParams,
@@ -73,6 +84,7 @@ export default async function MaquinaDetallePage({
             imagenUpdatedAt: true,
           },
         },
+        stockOrigen: true,
         mantenimientos: { orderBy: { solicitado: "desc" } },
         alquileres: { orderBy: { fechaInicio: "desc" } },
         fotos: { select: { id: true }, orderBy: { orden: "asc" } },
@@ -91,6 +103,13 @@ export default async function MaquinaDetallePage({
 
   if (!unidad) notFound();
 
+  // Si liberó y se desvinculó stockOrigen, buscar por serie.
+  const stock =
+    unidad.stockOrigen ??
+    (await prismaPg.maquinaStock.findFirst({
+      where: { numeroSerie: unidad.numeroSerie },
+    }));
+
   const cliente = await getCliente(unidad.idCliente);
   const update = updateMaquina.bind(null, unidad.id);
   const remove = deleteMaquina.bind(null, unidad.id);
@@ -101,6 +120,18 @@ export default async function MaquinaDetallePage({
   const clientesAlquilerMap = await getClientesMap(
     unidad.alquileres.map((a) => a.idCliente)
   );
+  const esAgh = marcaEsAgh(unidad.maquina.marca);
+  const hayDatosStock =
+    stock &&
+    (esAgh
+      ? stock.precio != null || stock.fechaFabricacion != null
+      : Boolean(
+          stock.despachoImportacion ||
+            stock.po ||
+            stock.origen ||
+            stock.valorFo != null ||
+            stock.fechaImportacion
+        ));
 
   return (
     <div>
@@ -191,6 +222,16 @@ export default async function MaquinaDetallePage({
                   name="ubicacion"
                   defaultValue={unidad.sitio ?? ""}
                   className={inputClass}
+                />
+              </Field>
+              <Field label="Nro. de orden de compra">
+                <input
+                  name="ordenCompra"
+                  maxLength={100}
+                  defaultValue={unidad.ordenCompra ?? ""}
+                  className={inputClass}
+                  placeholder="OC / nro. de orden del cliente"
+                  autoComplete="off"
                 />
               </Field>
               <Field label="Dirección de máquina">
@@ -311,6 +352,106 @@ export default async function MaquinaDetallePage({
               </span>
             </p>
           </Panel>
+
+          {stock ? (
+            <Panel>
+              <h3 className="brand-font mb-1 text-lg font-semibold text-white">
+                {esAgh ? "Datos de stock (AGH)" : "Datos de importación"}
+              </h3>
+              <p className="mb-4 text-sm text-[var(--ink-muted)]">
+                Información cargada al ingresar la unidad a stock
+                {stock.id ? ` · stock #${stock.id}` : ""}.
+              </p>
+              {hayDatosStock ? (
+                <dl className="grid gap-3 sm:grid-cols-2">
+                  {esAgh ? (
+                    <>
+                      <div>
+                        <dt className="text-xs text-[var(--ink-muted)]">
+                          Fecha de fabricación (stock)
+                        </dt>
+                        <dd className="mt-0.5 text-sm text-white">
+                          {formatDate(stock.fechaFabricacion)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-[var(--ink-muted)]">Precio</dt>
+                        <dd className="mt-0.5 text-sm text-white">
+                          {stock.precio != null
+                            ? formatStockMoney(stock.precio)
+                            : "—"}
+                        </dd>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <dt className="text-xs text-[var(--ink-muted)]">
+                          Nro. de despacho
+                        </dt>
+                        <dd className="mt-0.5 text-sm text-white">
+                          {stock.despachoImportacion?.trim() || "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-[var(--ink-muted)]">PO</dt>
+                        <dd className="mt-0.5 text-sm text-white">
+                          {stock.po?.trim() || "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-[var(--ink-muted)]">Origen</dt>
+                        <dd className="mt-0.5 text-sm text-white">
+                          {stock.origen?.trim() || "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-[var(--ink-muted)]">
+                          Valor FO
+                        </dt>
+                        <dd className="mt-0.5 text-sm text-white">
+                          {stock.valorFo != null
+                            ? formatStockMoney(stock.valorFo)
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-[var(--ink-muted)]">
+                          Fecha de importación
+                        </dt>
+                        <dd className="mt-0.5 text-sm text-white">
+                          {formatDate(stock.fechaImportacion)}
+                        </dd>
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <dt className="text-xs text-[var(--ink-muted)]">
+                      Estado en stock
+                    </dt>
+                    <dd className="mt-0.5 text-sm text-white">
+                      {stock.estado === "disponible" ? "Disponible" : "Asignado"}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <p className="text-sm text-[var(--ink-muted)]">
+                  Hay registro de stock para esta serie, pero sin PO / despacho /
+                  valor cargados.
+                </p>
+              )}
+            </Panel>
+          ) : (
+            <Panel>
+              <h3 className="brand-font mb-1 text-lg font-semibold text-white">
+                Datos de stock
+              </h3>
+              <p className="text-sm text-[var(--ink-muted)]">
+                Esta unidad no tiene un registro vinculado en stock (se asignó
+                sin pasar por depósito, o la serie no coincide).
+              </p>
+            </Panel>
+          )}
         </div>
 
         <div className="space-y-4">

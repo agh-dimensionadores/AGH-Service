@@ -23,6 +23,7 @@ import { marcaUsaStock } from "@/lib/marcas";
 export const dynamic = "force-dynamic";
 
 const MARCAS = ["AGH", "CUBISCAN", "Conlida", "Cubetape"] as const;
+const PAGE_SIZE = 20;
 
 function normalizeMarca(value: string) {
   return value.trim().toLowerCase();
@@ -43,11 +44,13 @@ function maquinasHref(opts: {
   q?: string;
   marca?: string;
   vista?: string;
+  page?: number;
 }) {
   const params = new URLSearchParams();
   if (opts.q) params.set("q", opts.q);
   if (opts.marca) params.set("marca", opts.marca);
   if (opts.vista) params.set("vista", opts.vista);
+  if (opts.page && opts.page > 1) params.set("page", String(opts.page));
   const s = params.toString();
   return s ? `/maquinas?${s}` : "/maquinas";
 }
@@ -55,14 +58,25 @@ function maquinasHref(opts: {
 export default async function MaquinasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ marca?: string; vista?: string; q?: string }>;
+  searchParams: Promise<{
+    marca?: string;
+    vista?: string;
+    q?: string;
+    page?: string;
+  }>;
 }) {
-  const { marca: marcaParam, vista: vistaParam, q: qRaw } = await searchParams;
+  const {
+    marca: marcaParam,
+    vista: vistaParam,
+    q: qRaw,
+    page: pageRaw,
+  } = await searchParams;
   const q = (qRaw || "").trim();
   const marcaActiva = MARCAS.find(
     (m) => normalizeMarca(m) === normalizeMarca(marcaParam ?? "")
   );
-  // Con búsqueda, mostramos todo lo que matchee (no solo favoritos).
+  // Favoritas solo afecta el catálogo; los equipos asignados se listan todos
+  // (salvo filtro de marca / búsqueda).
   const verTodas = vistaParam === "todas" || Boolean(marcaActiva) || Boolean(q);
   const verFavoritas = !verTodas;
 
@@ -122,8 +136,7 @@ export default async function MaquinasPage({
     );
   } else if (verFavoritas && hayFavoritos) {
     catalogo = catalogoAll.filter((item) => item.favorito);
-    const favIds = new Set(catalogo.map((c) => c.idmachine));
-    unidades = unidadesAll.filter((u) => favIds.has(u.idMaquina));
+    // Equipos asignados: no se filtran por favoritos
   }
 
   const clientesMap = await getClientesMap(unidades.map((u) => u.idCliente));
@@ -153,6 +166,23 @@ export default async function MaquinasPage({
       );
     });
   }
+
+  const totalUnidades = unidades.length;
+  const totalPages = Math.max(1, Math.ceil(totalUnidades / PAGE_SIZE));
+  const pageNum = Math.min(
+    Math.max(1, Number.parseInt(pageRaw || "1", 10) || 1),
+    totalPages
+  );
+  const unidadesPage = unidades.slice(
+    (pageNum - 1) * PAGE_SIZE,
+    pageNum * PAGE_SIZE
+  );
+
+  const listHrefBase = {
+    q: q || undefined,
+    marca: marcaActiva,
+    vista: vistaParam === "todas" ? "todas" : undefined,
+  };
 
   const hayFiltros = Boolean(q || marcaActiva || vistaParam === "todas");
 
@@ -215,7 +245,9 @@ export default async function MaquinasPage({
         </Link>
         <Link
           href={maquinasHref({ q: q || undefined, vista: "todas" })}
-          className={chipClass(vistaParam === "todas" || (Boolean(q) && !marcaActiva))}
+          className={chipClass(
+            vistaParam === "todas" || (Boolean(q) && !marcaActiva)
+          )}
         >
           Todas
         </Link>
@@ -237,7 +269,10 @@ export default async function MaquinasPage({
       {verFavoritas && !hayFavoritos ? (
         <p className="mb-4 rounded-xl border border-[var(--line)] px-4 py-3 text-sm text-[var(--ink-muted)]">
           Todavía no marcaste favoritos. Se muestran todas. Elegilas en{" "}
-          <Link href="/configuracion" className="text-[var(--accent)] hover:underline">
+          <Link
+            href="/configuracion"
+            className="text-[var(--accent)] hover:underline"
+          >
             Configuración
           </Link>
           .
@@ -246,8 +281,8 @@ export default async function MaquinasPage({
 
       {q ? (
         <p className="mb-3 text-sm text-[var(--ink-muted)]">
-          {catalogo.length + unidades.length} resultado
-          {catalogo.length + unidades.length === 1 ? "" : "s"}
+          {catalogo.length + totalUnidades} resultado
+          {catalogo.length + totalUnidades === 1 ? "" : "s"}
           {` para “${q}”`}
           {marcaActiva ? ` · ${marcaActiva}` : ""}
         </p>
@@ -318,9 +353,7 @@ export default async function MaquinasPage({
                       : ""}
                     {!maquinaImageSrc(item) ? " · sin foto" : ""}
                   </p>
-                  <p className="mt-2 text-xs text-[var(--accent)]">
-                    Editar
-                  </p>
+                  <p className="mt-2 text-xs text-[var(--accent)]">Editar</p>
                 </div>
               </Link>
             ))}
@@ -329,23 +362,29 @@ export default async function MaquinasPage({
       </section>
 
       <section>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="brand-font text-lg font-semibold text-white">
-            Equipos asignados
-          </h3>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="brand-font text-lg font-semibold text-white">
+              Equipos asignados
+            </h3>
+            <p className="mt-0.5 text-sm text-[var(--ink-muted)]">
+              {totalUnidades} equipo{totalUnidades === 1 ? "" : "s"}
+              {totalPages > 1
+                ? ` · página ${pageNum} de ${totalPages}`
+                : ""}
+            </p>
+          </div>
           <SecondaryLink href="/maquinas/asignar">Asignar a cliente</SecondaryLink>
         </div>
 
-        {unidades.length === 0 ? (
+        {totalUnidades === 0 ? (
           <EmptyState
             title={
               q
                 ? "Sin equipos"
                 : marcaActiva
                   ? `Sin equipos ${marcaActiva} asignados`
-                  : verFavoritas && hayFavoritos
-                    ? "Sin equipos de favoritos asignados"
-                    : "Nadie tiene equipos asignados"
+                  : "Nadie tiene equipos asignados"
             }
             description={
               q
@@ -363,56 +402,102 @@ export default async function MaquinasPage({
             }
           />
         ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Equipo</th>
-                  <th>Nro. serie</th>
-                  <th className="hidden md:table-cell">Cliente</th>
-                  <th>Estado</th>
-                  <th>Trabajos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {unidades.map((unidad) => {
-                  const estado = equipoEstado(unidad.mantenimientos);
-                  return (
-                    <tr key={unidad.id}>
-                      <td>
-                        <Link
-                          href={`/maquinas/${unidad.id}`}
-                          className="font-medium text-[var(--accent)] hover:underline"
-                        >
-                          {machineName(unidad)}
-                        </Link>
-                        {unidad.sitio ? (
-                          <p className="text-[var(--ink-muted)]">{unidad.sitio}</p>
-                        ) : null}
-                      </td>
-                      <td className="font-mono text-xs text-[var(--ink-muted)]">
-                        {unidad.numeroSerie}
-                      </td>
-                      <td className="hidden md:table-cell">
-                        <Link
-                          href={`/clientes/${unidad.idCliente}`}
-                          className="hover:text-[var(--accent)]"
-                        >
-                          {clienteLabel(clientesMap.get(unidad.idCliente))}
-                        </Link>
-                      </td>
-                      <td>
-                        <Badge tone={estadoTone(estado)}>
-                          {labelEstado(estado)}
-                        </Badge>
-                      </td>
-                      <td>{unidad._count.mantenimientos}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Equipo</th>
+                    <th>Nro. serie</th>
+                    <th className="hidden md:table-cell">Cliente</th>
+                    <th>Estado</th>
+                    <th>Trabajos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unidadesPage.map((unidad) => {
+                    const estado = equipoEstado(unidad.mantenimientos);
+                    return (
+                      <tr key={unidad.id}>
+                        <td>
+                          <Link
+                            href={`/maquinas/${unidad.id}`}
+                            className="font-medium text-[var(--accent)] hover:underline"
+                          >
+                            {machineName(unidad)}
+                          </Link>
+                          {unidad.sitio ? (
+                            <p className="text-[var(--ink-muted)]">
+                              {unidad.sitio}
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className="font-mono text-xs text-[var(--ink-muted)]">
+                          {unidad.numeroSerie}
+                        </td>
+                        <td className="hidden md:table-cell">
+                          <Link
+                            href={`/clientes/${unidad.idCliente}`}
+                            className="hover:text-[var(--accent)]"
+                          >
+                            {clienteLabel(clientesMap.get(unidad.idCliente))}
+                          </Link>
+                        </td>
+                        <td>
+                          <Badge tone={estadoTone(estado)}>
+                            {labelEstado(estado)}
+                          </Badge>
+                        </td>
+                        <td>{unidad._count.mantenimientos}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 ? (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-[var(--ink-muted)]">
+                  {(pageNum - 1) * PAGE_SIZE + 1}–
+                  {Math.min(pageNum * PAGE_SIZE, totalUnidades)} de{" "}
+                  {totalUnidades}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {pageNum > 1 ? (
+                    <Link
+                      href={maquinasHref({
+                        ...listHrefBase,
+                        page: pageNum - 1,
+                      })}
+                      className="btn-ghost"
+                    >
+                      Anterior
+                    </Link>
+                  ) : (
+                    <span className="btn-ghost pointer-events-none opacity-40">
+                      Anterior
+                    </span>
+                  )}
+                  {pageNum < totalPages ? (
+                    <Link
+                      href={maquinasHref({
+                        ...listHrefBase,
+                        page: pageNum + 1,
+                      })}
+                      className="btn-primary"
+                    >
+                      Siguiente
+                    </Link>
+                  ) : (
+                    <span className="btn-primary pointer-events-none opacity-40">
+                      Siguiente
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </>
         )}
       </section>
     </div>

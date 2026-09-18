@@ -106,6 +106,9 @@ export default async function StockMaquinasPage() {
                         ) : (
                           <>
                             Imp. {toDate(row.fechaImportacion)}
+                            {row.despachoImportacion
+                              ? ` · Desp. ${row.despachoImportacion}`
+                              : ""}
                             {row.po ? ` · PO ${row.po}` : ""}
                             {row.origen ? ` · ${row.origen}` : ""}
                             {row.valorFo != null

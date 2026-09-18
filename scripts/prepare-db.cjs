@@ -69,6 +69,10 @@ async function ensureTables() {
     ALTER TABLE clientes_maquinas
       ADD COLUMN IF NOT EXISTS liberada_en TIMESTAMPTZ
   `);
+  await db.$executeRawUnsafe(`
+    ALTER TABLE clientes_maquinas
+      ADD COLUMN IF NOT EXISTS orden_compra VARCHAR(100)
+  `);
   // Serie única solo en asignaciones activas (liberadas conservan historial)
   await db.$executeRawUnsafe(`
     ALTER TABLE clientes_maquinas

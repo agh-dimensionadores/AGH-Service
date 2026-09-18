@@ -605,6 +605,7 @@ export async function asignarMaquina(
           serieEcoflow: optionalStr(formData, "serieEcoflow"),
           seriePistola: optionalStr(formData, "seriePistola"),
           modalidad,
+          ordenCompra: optionalStr(formData, "ordenCompra"),
           fechaCompra:
             modalidad === "venta"
               ? optionalDate(formData, "fechaCompra")
@@ -842,6 +843,7 @@ export async function updateMaquina(
         seriePistola: optionalStr(formData, "seriePistola"),
         // modalidad no se cambia acá
         modalidad: existing.modalidad,
+        ordenCompra: optionalStr(formData, "ordenCompra"),
         fechaCompra:
           existing.modalidad === "venta"
             ? optionalDate(formData, "fechaCompra")

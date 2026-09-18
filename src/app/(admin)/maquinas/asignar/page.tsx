@@ -9,7 +9,6 @@ import {
   Field,
   PageHeader,
   Panel,
-  PrimaryLink,
   SecondaryLink,
   inputClass,
 } from "@/components/ui";
@@ -134,6 +133,15 @@ export default async function AsignarMaquinaPage({
               </select>
             </Field>
 
+            <Field label="Nro. de orden de compra">
+              <input
+                name="ordenCompra"
+                maxLength={100}
+                className={inputClass}
+                placeholder="OC / nro. de orden del cliente"
+                autoComplete="off"
+              />
+            </Field>
             <Field label="Fecha de fabricación">
               <input
                 name="fechaFabricacion"
@@ -200,8 +208,6 @@ export default async function AsignarMaquinaPage({
             <UnidadFotosField />
             <div className="sm:col-span-2 flex flex-wrap gap-2">
               <SubmitButton>Asignar al cliente</SubmitButton>
-              <PrimaryLink href="/maquinas/stock/nuevo">Agregar stock</PrimaryLink>
-              <PrimaryLink href="/maquinas/nueva">Agregar otra al catálogo</PrimaryLink>
             </div>
           </GuardedForm>
         )}
