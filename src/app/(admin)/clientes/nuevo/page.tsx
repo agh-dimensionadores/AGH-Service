@@ -18,11 +18,11 @@ export default function NuevoClientePage() {
       />
       <Panel className="max-w-2xl">
         <GuardedForm action={createCliente} className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nombre *">
-            <input name="nombre" required maxLength={100} className={inputClass} />
+          <Field label="Empresa *">
+            <input name="empresa" required maxLength={200} className={inputClass} />
           </Field>
-          <Field label="Empresa">
-            <input name="empresa" maxLength={200} className={inputClass} />
+          <Field label="Nombre de contacto">
+            <input name="nombre" maxLength={100} className={inputClass} />
           </Field>
           <Field label="Email">
             <input name="email" type="email" maxLength={200} className={inputClass} />

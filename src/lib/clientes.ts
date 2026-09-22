@@ -14,7 +14,9 @@ export type ClienteRow = {
 };
 
 export async function listClientes() {
-  return prismaPg.cliente.findMany({ orderBy: { nombre: "asc" } });
+  return prismaPg.cliente.findMany({
+    orderBy: [{ empresa: "asc" }, { nombre: "asc" }],
+  });
 }
 
 export async function getCliente(id: number) {

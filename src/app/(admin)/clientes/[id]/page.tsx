@@ -9,7 +9,7 @@ import {
 } from "@/app/actions";
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
 import { prismaPg } from "@/lib/prisma";
-import { getCliente } from "@/lib/clientes";
+import { clienteLabel, getCliente } from "@/lib/clientes";
 import {
   Badge,
   EmptyState,
@@ -78,10 +78,11 @@ export default async function ClienteDetallePage({
   return (
     <div>
       <PageHeader
-        title={cliente.nombre}
+        title={clienteLabel(cliente)}
         description={
-          cliente.empresa
-            ? `${cliente.empresa} · PostgreSQL · tabla clientes`
+          cliente.nombre &&
+          cliente.nombre !== (cliente.empresa ?? "")
+            ? `Contacto: ${cliente.nombre} · PostgreSQL · tabla clientes`
             : "PostgreSQL · tabla clientes"
         }
         action={
@@ -102,20 +103,24 @@ export default async function ClienteDetallePage({
             Datos del cliente
           </h3>
           <GuardedForm action={update} className="grid gap-4">
-            <Field label="Nombre *">
+            <Field label="Empresa *">
               <input
-                name="nombre"
+                name="empresa"
                 required
-                maxLength={100}
-                defaultValue={cliente.nombre}
+                maxLength={200}
+                defaultValue={cliente.empresa ?? ""}
                 className={inputClass}
               />
             </Field>
-            <Field label="Empresa">
+            <Field label="Nombre de contacto">
               <input
-                name="empresa"
-                maxLength={200}
-                defaultValue={cliente.empresa ?? ""}
+                name="nombre"
+                maxLength={100}
+                defaultValue={
+                  cliente.nombre === (cliente.empresa ?? "")
+                    ? ""
+                    : cliente.nombre
+                }
                 className={inputClass}
               />
             </Field>
@@ -318,7 +323,7 @@ export default async function ClienteDetallePage({
                   <input
                     name="nombre"
                     maxLength={100}
-                    defaultValue={cliente.nombre}
+                    defaultValue={clienteLabel(cliente)}
                     className={inputClass}
                   />
                 </Field>
@@ -414,7 +419,7 @@ export default async function ClienteDetallePage({
                 <input
                   name="fullName"
                   maxLength={150}
-                  defaultValue={cliente.nombre}
+                  defaultValue={clienteLabel(cliente)}
                   className={inputClass}
                 />
               </Field>

@@ -55,7 +55,8 @@ export default async function ClientesPage() {
                     >
                       {clienteLabel(cliente)}
                     </Link>
-                    {cliente.empresa ? (
+                    {cliente.nombre &&
+                    cliente.nombre !== (cliente.empresa ?? "") ? (
                       <p className="text-[var(--ink-muted)]">{cliente.nombre}</p>
                     ) : null}
                   </td>

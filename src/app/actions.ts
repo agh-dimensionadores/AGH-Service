@@ -102,10 +102,10 @@ function touch(...paths: string[]) {
 }
 
 export async function createCliente(formData: FormData) {
-  const nombre = str(formData, "nombre");
-  if (!nombre) throw new Error("El nombre es obligatorio");
+  const empresa = str(formData, "empresa");
+  if (!empresa) throw new Error("La empresa es obligatoria");
 
-  const empresa = optionalStr(formData, "empresa");
+  const nombre = optionalStr(formData, "nombre") || empresa;
   const email = optionalStr(formData, "email");
   const cuit = optionalStr(formData, "cuit");
   const direccion = optionalStr(formData, "direccion");
@@ -137,14 +137,16 @@ export async function createCliente(formData: FormData) {
 }
 
 export async function updateCliente(id: number, formData: FormData) {
-  const nombre = str(formData, "nombre");
-  if (!nombre) throw new Error("El nombre es obligatorio");
+  const empresa = str(formData, "empresa");
+  if (!empresa) throw new Error("La empresa es obligatoria");
+
+  const nombre = optionalStr(formData, "nombre") || empresa;
 
   await prismaPg.cliente.update({
     where: { id },
     data: {
       nombre,
-      empresa: optionalStr(formData, "empresa"),
+      empresa,
       email: optionalStr(formData, "email"),
       cuit: optionalStr(formData, "cuit"),
       direccion: optionalStr(formData, "direccion"),
