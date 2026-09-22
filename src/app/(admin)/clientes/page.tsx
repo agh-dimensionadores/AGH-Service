@@ -14,6 +14,7 @@ export default async function ClientesPage() {
   const clientes = await listClientes();
   const counts = await prismaPg.clienteMaquina.groupBy({
     by: ["idCliente"],
+    where: { liberadaEn: null },
     _count: { _all: true },
   });
   const countMap = new Map(counts.map((c) => [c.idCliente, c._count._all]));

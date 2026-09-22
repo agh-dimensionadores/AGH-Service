@@ -90,7 +90,7 @@ export default async function MaquinasPage({
         imagenMime: true,
         imagenUpdatedAt: true,
         favorito: true,
-        _count: { select: { instalaciones: true } },
+        _count: { select: { instalaciones: { where: { liberadaEn: null } } } },
       },
     }),
     prismaPg.clienteMaquina.findMany({

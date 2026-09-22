@@ -36,7 +36,7 @@ export default async function EditarCatalogoMaquinaPage({
       modelo: true,
       imagenMime: true,
       imagenUpdatedAt: true,
-      _count: { select: { instalaciones: true } },
+      _count: { select: { instalaciones: { where: { liberadaEn: null } } } },
     },
   });
   if (!item) notFound();
