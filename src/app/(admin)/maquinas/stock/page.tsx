@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { deleteStockMaquina } from "@/app/actions";
-import { DangerButton } from "@/components/form";
+import { deleteStockMaquina, updateStockPoImagen } from "@/app/actions";
+import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
+import { StockPoImagenField } from "@/components/stock-po-imagen-field";
 import { prismaPg } from "@/lib/prisma";
-import { marcaEsAgh } from "@/lib/marcas";
+import { marcaEsAgh, marcaEsImportacion } from "@/lib/marcas";
+import { listStockPoImagenFlags } from "@/lib/stock-po-imagen";
 import { machineName } from "@/lib/utils";
 import {
   Badge,
@@ -38,6 +40,7 @@ export default async function StockMaquinasPage() {
     },
   });
 
+  const poFlags = await listStockPoImagenFlags(rows.map((r) => r.id));
   const disponibles = rows.filter((r) => r.estado === "disponible").length;
 
   return (
@@ -67,57 +70,31 @@ export default async function StockMaquinasPage() {
             {disponibles} disponible{disponibles === 1 ? "" : "s"} · {rows.length}{" "}
             total
           </p>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Modelo</th>
-                  <th>Nro. serie</th>
-                  <th>Detalle</th>
-                  <th>Estado</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const remove = deleteStockMaquina.bind(null, row.id);
-                  const agh = marcaEsAgh(row.maquina.marca);
-                  return (
-                    <tr key={row.id}>
-                      <td>
+          <div className="space-y-4">
+            {rows.map((row) => {
+              const remove = deleteStockMaquina.bind(null, row.id);
+              const agh = marcaEsAgh(row.maquina.marca);
+              const importacion = marcaEsImportacion(row.maquina.marca);
+              const hasPo = poFlags.get(row.id) === true;
+              return (
+                <section
+                  key={row.id}
+                  className="card overflow-hidden p-0 sm:grid sm:grid-cols-[1fr_auto]"
+                >
+                  <div className="p-4 sm:p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
                         <p className="font-medium text-white">
                           {machineName(row.maquina)}
                         </p>
-                        <p className="text-xs text-[var(--ink-muted)]">
-                          #{row.id}
+                        <p className="mt-0.5 font-mono text-sm text-[var(--accent)]">
+                          {row.numeroSerie}
                         </p>
-                      </td>
-                      <td className="font-mono text-sm text-white">
-                        {row.numeroSerie}
-                      </td>
-                      <td className="text-sm text-[var(--ink-muted)]">
-                        {agh ? (
-                          <>
-                            Fab. {toDate(row.fechaFabricacion)}
-                            {row.precio != null
-                              ? ` · Precio ${formatMoney(row.precio)}`
-                              : ""}
-                          </>
-                        ) : (
-                          <>
-                            Imp. {toDate(row.fechaImportacion)}
-                            {row.despachoImportacion
-                              ? ` · Desp. ${row.despachoImportacion}`
-                              : ""}
-                            {row.po ? ` · PO ${row.po}` : ""}
-                            {row.origen ? ` · ${row.origen}` : ""}
-                            {row.valorFo != null
-                              ? ` · FO ${formatMoney(row.valorFo)}`
-                              : ""}
-                          </>
-                        )}
-                      </td>
-                      <td>
+                        <p className="mt-1 text-xs text-[var(--ink-muted)]">
+                          stock #{row.id}
+                        </p>
+                      </div>
+                      <div className="text-right">
                         <Badge
                           tone={row.estado === "disponible" ? "ok" : "neutral"}
                         >
@@ -125,31 +102,72 @@ export default async function StockMaquinasPage() {
                             ? "Disponible"
                             : "Asignado"}
                         </Badge>
-                        {row.idClienteMaquina ? (
-                          <p className="mt-1 text-xs">
-                            <Link
-                              href={`/maquinas/${row.idClienteMaquina}`}
-                              className="text-[var(--accent)] hover:underline"
-                            >
-                              Ver unidad
-                            </Link>
+                        {importacion ? (
+                          <p className="mt-1 text-xs text-[var(--ink-muted)]">
+                            {hasPo ? "Boleta con imagen" : "Sin imagen de boleta"}
                           </p>
                         ) : null}
-                      </td>
-                      <td>
-                        {row.estado === "disponible" ? (
-                          <form action={remove}>
-                            <DangerButton formAction={remove}>
-                              Quitar
-                            </DangerButton>
-                          </form>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm text-[var(--ink-muted)]">
+                      {agh ? (
+                        <>
+                          Fab. {toDate(row.fechaFabricacion)}
+                          {row.precio != null
+                            ? ` · Precio ${formatMoney(row.precio)}`
+                            : ""}
+                        </>
+                      ) : (
+                        <>
+                          Imp. {toDate(row.fechaImportacion)}
+                          {row.despachoImportacion
+                            ? ` · Desp. ${row.despachoImportacion}`
+                            : ""}
+                          {row.po ? ` · PO ${row.po}` : ""}
+                          {row.origen ? ` · ${row.origen}` : ""}
+                          {row.valorFo != null
+                            ? ` · FO ${formatMoney(row.valorFo)}`
+                            : ""}
+                        </>
+                      )}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      {row.idClienteMaquina ? (
+                        <Link
+                          href={`/maquinas/${row.idClienteMaquina}`}
+                          className="text-sm text-[var(--accent)] hover:underline"
+                        >
+                          Ver unidad asignada
+                        </Link>
+                      ) : null}
+                      {row.estado === "disponible" ? (
+                        <form action={remove}>
+                          <DangerButton formAction={remove}>Quitar</DangerButton>
+                        </form>
+                      ) : null}
+                    </div>
+                  </div>
+                  {importacion ? (
+                    <div className="border-t border-[var(--line)] bg-[rgba(255,255,255,0.02)] p-4 sm:w-80 sm:border-t-0 sm:border-l">
+                      <GuardedForm
+                        action={updateStockPoImagen.bind(null, row.id)}
+                      >
+                        <StockPoImagenField
+                          stockId={row.id}
+                          hasImage={hasPo}
+                          compact
+                        />
+                        <div className="mt-3">
+                          <SubmitButton>
+                            {hasPo ? "Actualizar boleta" : "Guardar boleta"}
+                          </SubmitButton>
+                        </div>
+                      </GuardedForm>
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
           </div>
         </>
       )}

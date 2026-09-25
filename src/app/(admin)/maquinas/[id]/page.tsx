@@ -5,11 +5,18 @@ import {
   liberarMaquinaAlquiler,
   updateAlquilerFin,
   updateMaquina,
+  updateStockPoImagen,
 } from "@/app/actions";
 import { DangerButton, GuardedForm, SubmitButton } from "@/components/form";
 import { DiasRestantesAlquiler } from "@/components/dias-restantes-alquiler";
 import { NumeroSerieConPrefijo } from "@/components/numero-serie-prefijo";
 import { UnidadFotosField } from "@/components/unidad-fotos-field";
+import { RemitoFotosField } from "@/components/remito-fotos-field";
+import { OrdenCompraFotosField } from "@/components/orden-compra-fotos-field";
+import { StockPoImagenField } from "@/components/stock-po-imagen-field";
+import { listRemitoFotos, getNumeroRemito } from "@/lib/remito-fotos";
+import { listOrdenCompraFotos } from "@/lib/orden-compra-fotos";
+import { stockHasPoImagen } from "@/lib/stock-po-imagen";
 import { prismaPg } from "@/lib/prisma";
 import {
   listClientes,
@@ -18,7 +25,7 @@ import {
   clienteLabel,
 } from "@/lib/clientes";
 import { MachineThumb } from "@/components/machine-thumb";
-import { marcaEsAgh } from "@/lib/marcas";
+import { marcaEsAgh, marcaEsImportacion } from "@/lib/marcas";
 import {
   Badge,
   EmptyState,
@@ -103,6 +110,9 @@ export default async function MaquinaDetallePage({
 
   if (!unidad) notFound();
 
+  const fotosRemito = await listRemitoFotos(unidad.id);
+  const fotosOrdenCompra = await listOrdenCompraFotos(unidad.id);
+  const numeroRemito = await getNumeroRemito(unidad.id);
   // Si liberó y se desvinculó stockOrigen, buscar por serie.
   const stock =
     unidad.stockOrigen ??
@@ -110,6 +120,7 @@ export default async function MaquinaDetallePage({
       where: { numeroSerie: unidad.numeroSerie },
     }));
 
+  const tienePoImagen = stock ? await stockHasPoImagen(stock.id) : false;
   const cliente = await getCliente(unidad.idCliente);
   const update = updateMaquina.bind(null, unidad.id);
   const remove = deleteMaquina.bind(null, unidad.id);
@@ -121,6 +132,7 @@ export default async function MaquinaDetallePage({
     unidad.alquileres.map((a) => a.idCliente)
   );
   const esAgh = marcaEsAgh(unidad.maquina.marca);
+  const esImportacion = marcaEsImportacion(unidad.maquina.marca);
   const hayDatosStock =
     stock &&
     (esAgh
@@ -234,6 +246,16 @@ export default async function MaquinaDetallePage({
                   autoComplete="off"
                 />
               </Field>
+              <Field label="Nro. de remito">
+                <input
+                  name="numeroRemito"
+                  maxLength={100}
+                  defaultValue={numeroRemito ?? ""}
+                  className={inputClass}
+                  placeholder="Nro. de remito de entrega"
+                  autoComplete="off"
+                />
+              </Field>
               <Field label="Dirección de máquina">
                 <input
                   name="direccionMaquina"
@@ -318,6 +340,17 @@ export default async function MaquinaDetallePage({
               <UnidadFotosField
                 unidadId={unidad.id}
                 existing={unidad.fotos}
+                readOnly={liberada}
+              />
+              <OrdenCompraFotosField
+                unidadId={unidad.id}
+                existing={fotosOrdenCompra}
+                readOnly={liberada}
+              />
+              <RemitoFotosField
+                unidadId={unidad.id}
+                existing={fotosRemito}
+                readOnly={liberada}
               />
                 <div className="flex flex-wrap gap-2">
                   {!liberada ? (
@@ -440,6 +473,21 @@ export default async function MaquinaDetallePage({
                   valor cargados.
                 </p>
               )}
+              {esImportacion && stock ? (
+                <GuardedForm
+                  action={updateStockPoImagen.bind(null, stock.id)}
+                  className="mt-5"
+                >
+                  <StockPoImagenField
+                    stockId={stock.id}
+                    hasImage={tienePoImagen}
+                    compact
+                  />
+                  <div className="mt-3">
+                    <SubmitButton>Guardar imagen de boleta</SubmitButton>
+                  </div>
+                </GuardedForm>
+              ) : null}
             </Panel>
           ) : (
             <Panel>

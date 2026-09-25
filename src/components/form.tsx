@@ -28,18 +28,16 @@ function friendlyActionError(err: unknown): string {
 /**
  * Evita doble envío. Usa useActionState para que el multipart (fotos)
  * se envíe como POST nativo y no se rompa al re-empaquetar FormData.
+ * No setear encType/method: con action función React 19 los define solo.
  */
 export function GuardedForm({
   action,
   className,
   children,
-  encType,
 }: {
   action: ServerAction;
   className?: string;
   children: React.ReactNode;
-  /** Necesario con inputs type=file */
-  encType?: "multipart/form-data" | "application/x-www-form-urlencoded";
 }) {
   const [error, formAction] = useActionState(
     async (_prev: string | null, formData: FormData) => {
@@ -60,7 +58,6 @@ export function GuardedForm({
   return (
     <form
       className={className}
-      encType={encType}
       action={formAction}
       onSubmit={(e) => {
         const form = e.currentTarget;

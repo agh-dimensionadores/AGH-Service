@@ -57,7 +57,10 @@ export default async function NuevoMantenimientoPage({
             .
           </p>
         ) : (
-          <GuardedForm action={createMantenimiento} className="grid gap-4 sm:grid-cols-2">
+          <GuardedForm
+            action={createMantenimiento}
+            className="grid gap-4 sm:grid-cols-2"
+          >
             <div className="sm:col-span-2">
               <p className="mb-2 text-sm font-medium text-white">Equipo *</p>
               <EquipoSelectField

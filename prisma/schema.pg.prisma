@@ -51,6 +51,8 @@ model ClienteMaquina {
   numeroSerie      String                  @map("numero_serie") @db.VarChar(100)
   /// Nro. de orden de compra del cliente (al asignar)
   ordenCompra      String?                 @map("orden_compra") @db.VarChar(100)
+  /// Nro. de remito de entrega (al asignar)
+  numeroRemito     String?                 @map("numero_remito") @db.VarChar(100)
   /// Número AnyDesk de la PC vinculada (opcional)
   anydesk          String?                 @db.VarChar(50)
   /// Nros. de serie de periféricos / PC (opcionales)

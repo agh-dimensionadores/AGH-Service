@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { usePendingFotos } from "@/components/pending-fotos";
 import { MAX_FOTOS_MANTENIMIENTO } from "@/lib/uploads";
 import { Field, inputClass } from "@/components/ui";
 
@@ -13,14 +13,9 @@ export function CubiscanFotosField({
   existing: { id: number }[];
   readOnly?: boolean;
 }) {
-  const [previews, setPreviews] = useState<{ url: string; name: string }[]>([]);
   const slots = Math.max(0, MAX_FOTOS_MANTENIMIENTO - existing.length);
-
-  useEffect(() => {
-    return () => {
-      previews.forEach((p) => URL.revokeObjectURL(p.url));
-    };
-  }, [previews]);
+  const { inputRef, pending, replaceFromInput, removeAt, clearAll } =
+    usePendingFotos(slots);
 
   return (
     <section className="rounded-xl border border-[var(--line)] p-4">
@@ -63,9 +58,9 @@ export function CubiscanFotosField({
           Todavía no hay fotos adjuntas.
         </p>
       )}
-      {previews.length ? (
+      {pending.length ? (
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {previews.map((p) => (
+          {pending.map((p, index) => (
             <div
               key={p.url}
               className="overflow-hidden rounded-lg border border-dashed border-[var(--line)]"
@@ -73,36 +68,48 @@ export function CubiscanFotosField({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={p.url}
-                alt={p.name}
+                alt={p.file.name}
                 className="h-28 w-full object-cover"
               />
-              <p className="truncate px-2 py-1.5 text-xs text-[var(--ink-muted)]">
-                Nueva · {p.name}
-              </p>
+              <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+                <p className="min-w-0 truncate text-xs text-[var(--ink-muted)]">
+                  Nueva · {p.file.name}
+                </p>
+                <button
+                  type="button"
+                  className="shrink-0 text-xs text-[var(--danger)] hover:underline"
+                  onClick={() => removeAt(index)}
+                >
+                  Quitar
+                </button>
+              </div>
             </div>
           ))}
         </div>
       ) : null}
       {!readOnly && slots > 0 ? (
-        <Field label="Adjuntar fotos">
-          <input
-            name="fotos"
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            multiple
-            className={inputClass}
-            onChange={(e) => {
-              const files = Array.from(e.target.files ?? []).slice(0, slots);
-              setPreviews((old) => {
-                old.forEach((p) => URL.revokeObjectURL(p.url));
-                return files.map((f) => ({
-                  url: URL.createObjectURL(f),
-                  name: f.name,
-                }));
-              });
-            }}
-          />
-        </Field>
+        <div className="space-y-2">
+          <Field label="Adjuntar fotos">
+            <input
+              ref={inputRef}
+              name="fotos"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              className={inputClass}
+              onChange={(e) => replaceFromInput(e.target.files)}
+            />
+          </Field>
+          {pending.length ? (
+            <button
+              type="button"
+              className="text-xs text-[var(--ink-muted)] hover:text-white hover:underline"
+              onClick={clearAll}
+            >
+              Limpiar selección
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

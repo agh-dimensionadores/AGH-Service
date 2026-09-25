@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { StockPoImagenField } from "@/components/stock-po-imagen-field";
 import { Field, inputClass } from "@/components/ui";
 import { marcaEsAgh, marcaEsImportacion } from "@/lib/marcas";
 import { seriePrefixFromModelo } from "@/lib/utils";
@@ -116,6 +117,7 @@ export function StockAltaFields({
               placeholder="0.00"
             />
           </Field>
+          <StockPoImagenField />
         </>
       ) : null}
 

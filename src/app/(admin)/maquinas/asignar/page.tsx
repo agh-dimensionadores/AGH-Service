@@ -3,6 +3,8 @@ import { asignarMaquina } from "@/app/actions";
 import { AsignacionCatalogoYSerie } from "@/components/asignacion-serie";
 import { GuardedForm, SubmitButton } from "@/components/form";
 import { UnidadFotosField } from "@/components/unidad-fotos-field";
+import { RemitoFotosField } from "@/components/remito-fotos-field";
+import { OrdenCompraFotosField } from "@/components/orden-compra-fotos-field";
 import { prismaPg } from "@/lib/prisma";
 import { listClientes, clienteLabel } from "@/lib/clientes";
 import {
@@ -108,7 +110,10 @@ export default async function AsignarMaquinaPage({
             .
           </p>
         ) : (
-          <GuardedForm action={asignarMaquina} className="grid gap-4 sm:grid-cols-2">
+          <GuardedForm
+            action={asignarMaquina}
+            className="grid gap-4 sm:grid-cols-2"
+          >
             <AsignacionCatalogoYSerie
               catalogo={catalogoForClient}
               stockDisponible={stockForClient}
@@ -139,6 +144,15 @@ export default async function AsignarMaquinaPage({
                 maxLength={100}
                 className={inputClass}
                 placeholder="OC / nro. de orden del cliente"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Nro. de remito">
+              <input
+                name="numeroRemito"
+                maxLength={100}
+                className={inputClass}
+                placeholder="Nro. de remito de entrega"
                 autoComplete="off"
               />
             </Field>
@@ -206,6 +220,8 @@ export default async function AsignarMaquinaPage({
               />
             </Field>
             <UnidadFotosField />
+            <OrdenCompraFotosField />
+            <RemitoFotosField />
             <div className="sm:col-span-2 flex flex-wrap gap-2">
               <SubmitButton>Asignar al cliente</SubmitButton>
             </div>

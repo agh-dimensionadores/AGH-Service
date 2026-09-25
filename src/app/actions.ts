@@ -30,6 +30,9 @@ import {
   MAX_FOTOS_UNIDAD,
   readUploadedImage,
 } from "@/lib/uploads";
+import { saveRemitoFotos, setNumeroRemito } from "@/lib/remito-fotos";
+import { saveOrdenCompraFotos } from "@/lib/orden-compra-fotos";
+import { saveStockPoImagen } from "@/lib/stock-po-imagen";
 import { getCliente, clienteLabel } from "@/lib/clientes";
 import {
   calibracionModeloLabel,
@@ -653,6 +656,7 @@ export async function asignarMaquina(
   }
 
   await saveUnidadFotos(unidad.id, formData);
+  await setNumeroRemito(unidad.id, optionalStr(formData, "numeroRemito"));
 
   touch(
     "/maquinas",
@@ -738,7 +742,7 @@ export async function crearStockMaquina(
   }
 
   try {
-    await prismaPg.maquinaStock.create({
+    const created = await prismaPg.maquinaStock.create({
       data: {
         idMaquina,
         numeroSerie,
@@ -752,6 +756,9 @@ export async function crearStockMaquina(
         estado: "disponible",
       },
     });
+    if (esImportacion) {
+      await saveStockPoImagen(created.id, formData);
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
     if (/unique|duplicate|numero_serie/i.test(msg)) {
@@ -762,6 +769,40 @@ export async function crearStockMaquina(
 
   touch("/maquinas/stock", "/maquinas");
   redirect("/maquinas/stock");
+}
+
+/** Carga o reemplaza la imagen de la OC/PO de un stock de importación (también si ya está asignado). */
+export async function updateStockPoImagen(
+  stockId: number,
+  formData: FormData
+): Promise<{ error: string } | void> {
+  await requireAdmin();
+  const item = await prismaPg.maquinaStock.findUnique({
+    where: { id: stockId },
+    select: {
+      id: true,
+      idClienteMaquina: true,
+      maquina: { select: { marca: true } },
+    },
+  });
+  if (!item) return { error: "Unidad de stock no encontrada" };
+  if (!marcaEsImportacion(item.maquina.marca)) {
+    return { error: "Solo aplica a stock de importación (Cubiscan / Conlida / Cubetape)" };
+  }
+
+  const file = formData.get("poImagen");
+  const quitar = formData.get("quitarPoImagen");
+  const hasFile = file instanceof File && file.size > 0;
+  const wantsRemove = quitar === "1" || quitar === "on";
+  if (!hasFile && !wantsRemove) {
+    return { error: "Elegí una imagen o marcá quitar la actual" };
+  }
+
+  await saveStockPoImagen(stockId, formData);
+
+  const paths = ["/maquinas/stock", "/maquinas"];
+  if (item.idClienteMaquina) paths.push(`/maquinas/${item.idClienteMaquina}`);
+  touch(...paths);
 }
 
 export async function deleteStockMaquina(id: number) {
@@ -860,6 +901,8 @@ export async function updateMaquina(
     }
     throw e;
   }
+
+  await setNumeroRemito(id, optionalStr(formData, "numeroRemito"));
 
   // Mantener la serie alineada en el stock vinculado
   if (stockVinculado) {
@@ -1425,6 +1468,9 @@ async function saveUnidadFotos(idClienteMaquina: number, formData: FormData) {
     });
     ordenN += 1;
   }
+
+  await saveRemitoFotos(idClienteMaquina, formData);
+  await saveOrdenCompraFotos(idClienteMaquina, formData);
 }
 
 async function ensureCubiscanFotosTable() {

@@ -3,6 +3,8 @@ export const MAX_FOTO_MANTENIMIENTO_BYTES = 2 * 1024 * 1024;
 export const MAX_FOTOS_MANTENIMIENTO = 6;
 export const MAX_FOTO_UNIDAD_BYTES = 2 * 1024 * 1024;
 export const MAX_FOTOS_UNIDAD = 8;
+export const MAX_FOTOS_REMITO = 6;
+export const MAX_FOTOS_ORDEN_COMPRA = 3;
 export const MAX_FOTO_SOLICITUD_BYTES = 2 * 1024 * 1024;
 export const MAX_FOTOS_SOLICITUD = 6;
 

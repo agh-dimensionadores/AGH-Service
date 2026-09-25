@@ -2,39 +2,40 @@
 
 import { PhotoThumb } from "@/components/image-lightbox";
 import { usePendingFotos } from "@/components/pending-fotos";
-import { MAX_FOTOS_SOLICITUD } from "@/lib/uploads";
+import { MAX_FOTOS_ORDEN_COMPRA } from "@/lib/uploads";
 import { Field, inputClass } from "@/components/ui";
 
-export function SolicitudFotosField({
-  mantenimientoId,
+export function OrdenCompraFotosField({
+  unidadId,
   existing = [],
   readOnly = false,
   className = "",
 }: {
-  mantenimientoId?: number;
+  unidadId?: number;
   existing?: { id: number }[];
   readOnly?: boolean;
   className?: string;
 }) {
-  const slots = Math.max(0, MAX_FOTOS_SOLICITUD - existing.length);
+  const slots = Math.max(0, MAX_FOTOS_ORDEN_COMPRA - existing.length);
   const { inputRef, pending, replaceFromInput, removeAt, clearAll } =
     usePendingFotos(slots);
 
   return (
     <section
-      className={`rounded-xl border border-[var(--line)] p-4 ${className}`}
+      className={`rounded-xl border border-[var(--line)] p-4 sm:col-span-2 ${className}`}
     >
-      <h3 className="brand-font mb-1 text-base font-semibold text-white">
-        Fotos del problema
+      <h3 className="brand-font mb-1 text-lg font-semibold text-white">
+        Orden de compra
       </h3>
-      <p className="mb-3 text-xs text-[var(--ink-muted)]">
-        Opcional. Hasta {MAX_FOTOS_SOLICITUD} fotos (JPG, PNG, WEBP o GIF · máx.
-        2 MB). Ayudan a entender el fallo antes de la visita. Clic para ampliar.
+      <p className="mb-4 text-xs text-[var(--ink-muted)]">
+        Opcional. Hasta {MAX_FOTOS_ORDEN_COMPRA} fotos de la orden de compra del
+        cliente (JPG, PNG, WEBP o GIF · máx. 2 MB cada una). Clic en una foto
+        para ampliarla.
       </p>
-      {existing.length && mantenimientoId != null ? (
-        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {existing.length && unidadId != null ? (
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {existing.map((foto) => {
-            const src = `/api/mantenimientos/${mantenimientoId}/fotos/${foto.id}`;
+            const src = `/api/maquinas/${unidadId}/orden-compra/${foto.id}`;
             return (
               <div
                 key={foto.id}
@@ -42,16 +43,27 @@ export function SolicitudFotosField({
               >
                 <PhotoThumb
                   src={src}
-                  alt={`Foto ${foto.id}`}
+                  alt={`OC ${foto.id}`}
                   className="h-28 w-full object-cover"
                 />
+                {!readOnly ? (
+                  <label className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs text-[var(--ink-muted)]">
+                    <input
+                      type="checkbox"
+                      name="quitarFotoOrdenCompra"
+                      value={foto.id}
+                      className="accent-[var(--accent)]"
+                    />
+                    Quitar
+                  </label>
+                ) : null}
               </div>
             );
           })}
         </div>
       ) : null}
       {pending.length ? (
-        <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {pending.map((p, index) => (
             <div
               key={p.url}
@@ -80,10 +92,10 @@ export function SolicitudFotosField({
       ) : null}
       {!readOnly && slots > 0 ? (
         <div className="space-y-2">
-          <Field label="Adjuntar fotos">
+          <Field label="Adjuntar fotos de la orden de compra">
             <input
               ref={inputRef}
-              name="fotosSolicitud"
+              name="fotosOrdenCompra"
               type="file"
               accept="image/png,image/jpeg,image/webp,image/gif"
               multiple

@@ -60,11 +60,7 @@ export default async function EditarCatalogoMaquinaPage({
           className="mb-4 machine-thumb object-cover"
         />
 
-        <GuardedForm
-          action={update}
-          encType="multipart/form-data"
-          className="grid gap-4"
-        >
+        <GuardedForm action={update} className="grid gap-4">
           <Field label="Marca *">
             <input
               name="marca"

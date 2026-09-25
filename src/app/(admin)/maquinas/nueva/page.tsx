@@ -19,7 +19,6 @@ export default function NuevaMaquinaPage() {
       <Panel className="max-w-xl">
         <GuardedForm
           action={createCatalogoMaquina}
-          encType="multipart/form-data"
           className="grid gap-4"
         >
           <Field label="Marca *">
